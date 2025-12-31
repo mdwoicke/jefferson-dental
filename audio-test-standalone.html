@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>OpenAI Audio Test - Standalone</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        h1 { color: #4CAF50; }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #logs {
+            margin-top: 20px;
+            padding: 15px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 8px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #666;
+            padding-left: 10px;
+        }
+        .success { border-left-color: #4CAF50; color: #4CAF50; }
+        .error { border-left-color: #f44336; color: #f44336; }
+        .info { border-left-color: #2196F3; color: #2196F3; }
+    </style>
+</head>
+<body>
+    <h1>🎤 OpenAI Realtime Audio Test</h1>
+    <p style="color: #aaa;">Direct test of OpenAI Realtime API - No framework, no caching</p>
+
+    <div>
+        <button id="startBtn" onclick="startTest()">▶️ Start Audio Test</button>
+        <button id="stopBtn" onclick="stopTest()" disabled>⏹️ Stop Test</button>
+    </div>
+
+    <div id="logs"></div>
+
+    <script>
+        const OPENAI_API_KEY = 'YOUR_OPENAI_API_KEY_HERE';
+
+        let ws = null;
+        let audioContext = null;
+        let nextStartTime = 0;
+
+        function log(message, type = 'info') {
+            const logsDiv = document.getElementById('logs');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logsDiv.appendChild(entry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            console.log(`[${type.toUpperCase()}]`, message);
+        }
+
+        function base64ToUint8Array(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        async function decodeAudio(audioBytes) {
+            const dataInt16 = new Int16Array(audioBytes.buffer);
+            const frameCount = dataInt16.length;
+            const buffer = audioContext.createBuffer(1, frameCount, 24000);
+            const channelData = buffer.getChannelData(0);
+
+            for (let i = 0; i < frameCount; i++) {
+                channelData[i] = dataInt16[i] / 32768.0;
+            }
+            return buffer;
+        }
+
+        async function playAudio(audioBytes) {
+            try {
+                const audioBuffer = await decodeAudio(audioBytes);
+                log(`✅ Decoded ${audioBuffer.duration.toFixed(2)}s of audio`, 'success');
+
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+
+                nextStartTime = Math.max(nextStartTime, audioContext.currentTime);
+                source.start(nextStartTime);
+                log(`▶️ Playing audio at ${nextStartTime.toFixed(2)}s`, 'success');
+                nextStartTime += audioBuffer.duration;
+            } catch (err) {
+                log(`❌ Audio playback error: ${err.message}`, 'error');
+            }
+        }
+
+        function sendText(text) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ WebSocket not ready', 'error');
+                return;
+            }
+
+            const message = {
+                type: 'conversation.item.create',
+                item: {
+                    type: 'message',
+                    role: 'user',
+                    content: [{ type: 'input_text', text: text }]
+                }
+            };
+            ws.send(JSON.stringify(message));
+
+            const responseMessage = {
+                type: 'response.create',
+                response: { modalities: ['audio', 'text'] }
+            };
+            ws.send(JSON.stringify(responseMessage));
+            log(`📤 Sent text: "${text}"`, 'info');
+        }
+
+        async function startTest() {
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('logs').innerHTML = '';
+
+            log('🎬 Starting OpenAI Realtime API test...', 'info');
+            log(`🔑 API Key: ${OPENAI_API_KEY.substring(0, 20)}...`, 'info');
+
+            try {
+                // Create AudioContext
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+                await audioContext.resume();
+                log(`🔊 AudioContext created (state: ${audioContext.state})`, 'success');
+
+                // Connect to OpenAI
+                const url = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17';
+                log('🔌 Connecting to OpenAI WebSocket...', 'info');
+
+                ws = new WebSocket(url, [
+                    'realtime',
+                    `openai-insecure-api-key.${OPENAI_API_KEY}`,
+                    'openai-beta.realtime-v1'
+                ]);
+
+                ws.addEventListener('open', () => {
+                    log('✅ WebSocket OPENED', 'success');
+
+                    // Send session configuration
+                    const sessionConfig = {
+                        type: 'session.update',
+                        session: {
+                            modalities: ['text', 'audio'],
+                            instructions: 'You are Sophia, a helpful AI assistant for Jefferson Dental Clinics. Greet the user warmly and ask how you can help them today. Keep your response brief - just 1-2 sentences.',
+                            voice: 'alloy',
+                            input_audio_format: 'pcm16',
+                            output_audio_format: 'pcm16',
+                            turn_detection: { type: 'server_vad' },
+                            temperature: 0.8
+                        }
+                    };
+                    ws.send(JSON.stringify(sessionConfig));
+                    log('📤 Sent session config', 'info');
+                });
+
+                ws.addEventListener('message', async (event) => {
+                    const message = JSON.parse(event.data);
+
+                    switch (message.type) {
+                        case 'session.created':
+                            log(`✅ ${message.type}`, 'success');
+                            break;
+
+                        case 'session.updated':
+                            log(`✅ ${message.type}`, 'success');
+                            // Trigger conversation after a delay
+                            setTimeout(() => {
+                                log('📞 Triggering AI to speak...', 'info');
+                                sendText('Hello');
+                            }, 1000);
+                            break;
+
+                        case 'response.audio.delta':
+                            if (message.delta) {
+                                const audioData = base64ToUint8Array(message.delta);
+                                log(`📡 Received audio chunk: ${audioData.length} bytes`, 'info');
+                                await playAudio(audioData);
+                            }
+                            break;
+
+                        case 'response.audio.done':
+                            log('🎵 Audio response complete', 'success');
+                            break;
+
+                        case 'response.done':
+                            log('✅ Response complete', 'success');
+                            break;
+
+                        case 'error':
+                            log(`❌ OpenAI ERROR: ${JSON.stringify(message.error)}`, 'error');
+                            break;
+
+                        default:
+                            // Silently ignore other message types
+                            break;
+                    }
+                });
+
+                ws.addEventListener('close', (event) => {
+                    log(`🔴 WebSocket CLOSED (code: ${event.code}, reason: ${event.reason || 'none'})`, 'error');
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('stopBtn').disabled = true;
+                });
+
+                ws.addEventListener('error', (err) => {
+                    log(`❌ WebSocket ERROR: ${err.message || 'Unknown error'}`, 'error');
+                });
+
+            } catch (err) {
+                log(`❌ Setup error: ${err.message}`, 'error');
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+            }
+        }
+
+        function stopTest() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            log('⏹️ Test stopped', 'info');
+        }
+
+        // Log that page loaded successfully
+        window.addEventListener('load', () => {
+            console.log('✅ Test page loaded successfully');
+        });
+    </script>
+</body>
+</html>

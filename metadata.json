@@ -1,0 +1,7 @@
+{
+  "name": "Jefferson Dental Clinics Outreach",
+  "description": "AI-driven outbound outreach demo for Medicaid dental benefits scheduling.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

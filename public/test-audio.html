@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenAI Audio Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #logs {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>OpenAI Realtime Audio Test</h1>
+    <p>This test bypasses all caching and directly tests the OpenAI Realtime API connection.</p>
+
+    <button id="startBtn" onclick="startTest()">Start Audio Test</button>
+    <button id="stopBtn" onclick="stopTest()" disabled>Stop Test</button>
+
+    <div id="logs"></div>
+
+    <script>
+        const OPENAI_API_KEY = 'YOUR_OPENAI_API_KEY_HERE';
+
+        let ws = null;
+        let audioContext = null;
+        let nextStartTime = 0;
+
+        function log(message, type = 'info') {
+            const logsDiv = document.getElementById('logs');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(entry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function base64ToUint8Array(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        async function decodeAudio(audioBytes) {
+            const dataInt16 = new Int16Array(audioBytes.buffer);
+            const frameCount = dataInt16.length;
+            const buffer = audioContext.createBuffer(1, frameCount, 24000);
+            const channelData = buffer.getChannelData(0);
+
+            for (let i = 0; i < frameCount; i++) {
+                channelData[i] = dataInt16[i] / 32768.0;
+            }
+            return buffer;
+        }
+
+        async function playAudio(audioBytes) {
+            try {
+                const audioBuffer = await decodeAudio(audioBytes);
+                log(`✅ Decoded ${audioBuffer.duration.toFixed(2)}s of audio`, 'success');
+
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+
+                nextStartTime = Math.max(nextStartTime, audioContext.currentTime);
+                source.start(nextStartTime);
+                log(`▶️ Playing audio at ${nextStartTime.toFixed(2)}s`, 'info');
+                nextStartTime += audioBuffer.duration;
+            } catch (err) {
+                log(`❌ Audio playback error: ${err.message}`, 'error');
+            }
+        }
+
+        function sendText(text) {
+            if (!ws) return;
+
+            const message = {
+                type: 'conversation.item.create',
+                item: {
+                    type: 'message',
+                    role: 'user',
+                    content: [{ type: 'input_text', text: text }]
+                }
+            };
+            ws.send(JSON.stringify(message));
+
+            const responseMessage = {
+                type: 'response.create',
+                response: { modalities: ['audio', 'text'] }
+            };
+            ws.send(JSON.stringify(responseMessage));
+            log(`📤 Sent text: "${text}"`, 'info');
+        }
+
+        async function startTest() {
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('logs').innerHTML = '';
+
+            log('🎬 Starting OpenAI Realtime API test...', 'info');
+
+            // Create AudioContext
+            audioContext = new AudioContext({ sampleRate: 24000 });
+            await audioContext.resume();
+            log(`🔊 AudioContext created (state: ${audioContext.state})`, 'success');
+
+            // Connect to OpenAI
+            const url = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17';
+
+            ws = new WebSocket(url, [
+                'realtime',
+                `openai-insecure-api-key.${OPENAI_API_KEY}`,
+                'openai-beta.realtime-v1'
+            ]);
+
+            ws.addEventListener('open', () => {
+                log('✅ WebSocket OPENED', 'success');
+
+                // Send session configuration
+                const sessionConfig = {
+                    type: 'session.update',
+                    session: {
+                        modalities: ['text', 'audio'],
+                        instructions: 'You are Sophia, an AI assistant for Jefferson Dental Clinics. Say hello and ask how you can help today.',
+                        voice: 'alloy',
+                        input_audio_format: 'pcm16',
+                        output_audio_format: 'pcm16',
+                        turn_detection: { type: 'server_vad' }
+                    }
+                };
+                ws.send(JSON.stringify(sessionConfig));
+                log('📤 Sent session config', 'info');
+            });
+
+            ws.addEventListener('message', async (event) => {
+                const message = JSON.parse(event.data);
+
+                switch (message.type) {
+                    case 'session.created':
+                    case 'session.updated':
+                        log(`✅ ${message.type}`, 'success');
+                        if (message.type === 'session.updated') {
+                            // Trigger conversation
+                            setTimeout(() => {
+                                log('📞 Triggering AI to speak...', 'info');
+                                sendText('Hello');
+                            }, 1000);
+                        }
+                        break;
+
+                    case 'response.audio.delta':
+                        if (message.delta) {
+                            const audioData = base64ToUint8Array(message.delta);
+                            log(`📡 Received audio: ${audioData.length} bytes`, 'info');
+                            await playAudio(audioData);
+                        }
+                        break;
+
+                    case 'response.audio.done':
+                        log('🎵 Audio response complete', 'success');
+                        break;
+
+                    case 'error':
+                        log(`❌ ERROR: ${message.error.message}`, 'error');
+                        break;
+
+                    default:
+                        // Ignore other message types
+                        break;
+                }
+            });
+
+            ws.addEventListener('close', () => {
+                log('🔴 WebSocket CLOSED', 'error');
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+            });
+
+            ws.addEventListener('error', (err) => {
+                log(`❌ WebSocket ERROR: ${err}`, 'error');
+            });
+        }
+
+        function stopTest() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            log('⏹️ Test stopped', 'info');
+        }
+    </script>
+</body>
+</html>

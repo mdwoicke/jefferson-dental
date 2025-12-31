@@ -1,0 +1,31 @@
+{
+  "name": "jefferson-dental-clinics-outreach",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "backend": "cd backend && npm run dev",
+    "start:all": "concurrently \"npm:backend\" \"npm:dev\" --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\"",
+    "start:telephony": "node scripts/start-with-ngrok.js",
+    "start:manual": "concurrently \"ngrok http 3001\" \"npm:backend\" \"npm:dev\" --names \"NGROK,BACKEND,FRONTEND\" --prefix-colors \"magenta,blue,green\""
+  },
+  "dependencies": {
+    "@google/genai": "^1.30.0",
+    "@types/sql.js": "^1.4.9",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^6.30.2",
+    "sql.js": "^1.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.2.1",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "wait-on": "^9.0.3"
+  }
+}
