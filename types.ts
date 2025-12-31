@@ -19,6 +19,7 @@ export interface ProviderConfig {
   model: string;
   systemInstruction: string;
   voiceName: string;
+  toolConfigs?: import('./types/demo-config').ToolConfig[];
 }
 
 export interface AudioMessage {

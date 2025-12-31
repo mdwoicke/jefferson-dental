@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { DatabaseProvider } from './contexts/DatabaseContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { DemoConfigProvider } from './contexts/DemoConfigContext';
 import { AppWithNav } from './components/AppWithNav';
 import AppBasic from './AppBasic';
 import { AdminDashboard } from './admin/AdminDashboard';
@@ -142,12 +143,15 @@ root.render(
   <React.StrictMode>
     <ThemeProvider>
       <DatabaseProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<AppSelector />} />
-            <Route path="/admin/*" element={<AdminDashboard />} />
-          </Routes>
-        </BrowserRouter>
+        <DemoConfigProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<AppSelector />} />
+              <Route path="/admin/*" element={<AdminDashboard />} />
+              <Route path="*" element={<div style={{padding: '20px', background: 'red', color: 'white'}}>404 - Route not found: {window.location.pathname}</div>} />
+            </Routes>
+          </BrowserRouter>
+        </DemoConfigProvider>
       </DatabaseProvider>
     </ThemeProvider>
   </React.StrictMode>

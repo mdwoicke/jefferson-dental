@@ -36,6 +36,9 @@ export class OpenAIProvider implements IVoiceProvider {
   private toolAdapter: any = null; // Will be ProviderToolAdapter | null
   private initializationPromise: Promise<void> | null = null;
 
+  // Tool configs from demo configuration
+  private configuredToolConfigs: import('../types/demo-config').ToolConfig[] = [];
+
   constructor(dbAdapter?: DatabaseAdapter) {
     if (dbAdapter) {
       this.dbAdapter = dbAdapter;
@@ -455,6 +458,9 @@ export class OpenAIProvider implements IVoiceProvider {
   private sendSessionUpdate(config: ProviderConfig): void {
     if (!this.ws) return;
 
+    // Store tool configs for later reference
+    this.configuredToolConfigs = config.toolConfigs || [];
+
     // Choose tool source based on system mode
     let tools: any[] = [];
 
@@ -466,6 +472,37 @@ export class OpenAIProvider implements IVoiceProvider {
       // STATIC: Use hardcoded definitions
       tools = this.getStaticToolDefinitions();
       console.log(`📦 Using STATIC tools (${tools.length} hardcoded tools)`);
+    }
+
+    // Filter tools based on demo configuration if toolConfigs are provided
+    if (this.configuredToolConfigs.length > 0) {
+      const enabledToolNames = new Set(
+        this.configuredToolConfigs
+          .filter(tc => tc.isEnabled)
+          .map(tc => tc.toolName)
+      );
+
+      // Filter static/dynamic tools to only those enabled in config
+      const filteredTools = tools.filter(tool => enabledToolNames.has(tool.name));
+
+      // Add custom tools from config
+      const customToolConfigs = this.configuredToolConfigs.filter(
+        tc => tc.toolType === 'custom' && tc.isEnabled
+      );
+
+      const customTools = customToolConfigs.map(tc => ({
+        type: 'function',
+        name: tc.toolName,
+        description: tc.description || `Custom tool: ${tc.displayName}`,
+        parameters: tc.parametersSchema || {
+          type: 'object',
+          properties: {},
+          required: []
+        }
+      }));
+
+      tools = [...filteredTools, ...customTools];
+      console.log(`🎛️  Filtered to ${tools.length} tools based on demo config (${enabledToolNames.size} enabled, ${customTools.length} custom)`);
     }
 
     const sessionConfig = {
@@ -852,6 +889,32 @@ export class OpenAIProvider implements IVoiceProvider {
       case 'get_appointment_preparation':
         return await this.handleGetAppointmentPreparation(args);
       default:
+        // Check if this is a custom tool from demo config
+        const customTool = this.configuredToolConfigs.find(
+          tc => tc.toolName === name && tc.toolType === 'custom' && tc.isEnabled
+        );
+
+        if (customTool) {
+          console.log(`🎛️  Executing custom tool: ${name} (mock response)`);
+
+          // Simulate delay if configured
+          if (customTool.mockResponseDelayMs && customTool.mockResponseDelayMs > 0) {
+            await new Promise(resolve => setTimeout(resolve, customTool.mockResponseDelayMs));
+          }
+
+          // Return mock response
+          if (customTool.mockResponseTemplate) {
+            try {
+              return JSON.parse(customTool.mockResponseTemplate);
+            } catch {
+              // If not valid JSON, return as string
+              return { success: true, message: customTool.mockResponseTemplate };
+            }
+          }
+
+          return { success: true, message: `Custom tool ${name} executed successfully` };
+        }
+
         throw new Error(`Unknown function: ${name}`);
     }
   }

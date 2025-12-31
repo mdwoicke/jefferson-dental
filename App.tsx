@@ -9,9 +9,12 @@ import { TranscriptPanel } from './components/TranscriptPanel';
 import { AppointmentSummaryCard } from './components/AppointmentSummaryCard';
 import { ThemeToggle } from './components/ThemeToggle';
 import IPhoneCallScreen from './components/IPhoneCallScreen';
+import { DemoConfigSelector } from './components/DemoConfigSelector';
+import { DemoWizard } from './wizard';
 import { extractSuccessfulBookings, extractSMSConfirmationRequest } from './utils/appointment-utils';
 import { VoiceProvider } from './types';
 import { useDatabase } from './contexts/DatabaseContext';
+import { useActiveDemoConfig } from './contexts/DemoConfigContext';
 import type { PatientRecord } from './database/db-interface';
 
 type AppMode = 'browser' | 'telephony';
@@ -65,6 +68,10 @@ const App: React.FC<AppProps> = ({ onNavigateToHistory }) => {
   const [provider, setProvider] = useState<VoiceProvider>('openai');
   const [hasCallEnded, setHasCallEnded] = useState(false);
   const [toolSystemMode, setToolSystemMode] = useState<string>('unknown');
+
+  // Demo configuration
+  const { activeConfig } = useActiveDemoConfig();
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
 
   // SMS Notification state
   const [smsMessage, setSmsMessage] = useState<string>('');
@@ -131,8 +138,10 @@ const App: React.FC<AppProps> = ({ onNavigateToHistory }) => {
     audioDevices,
     selectedDeviceId,
     setSelectedDeviceId,
-    enumerateAudioDevices
-  } = useLiveSession(provider, selectedPatientId, dbAdapter, setToolSystemMode);
+    enumerateAudioDevices,
+    // Secure context check
+    isSecureContext
+  } = useLiveSession(provider, selectedPatientId, dbAdapter, setToolSystemMode, activeConfig);
 
   // Sync hook's toolSystemMode to local state
   React.useEffect(() => {
@@ -156,7 +165,7 @@ const App: React.FC<AppProps> = ({ onNavigateToHistory }) => {
     console.log('📋 APP.TSX - bookings data:', successfulBookings);
   }, [successfulBookings]);
 
-  // Format SMS message from booking
+  // Format SMS message from booking using dynamic config
   const formatSMSMessage = (booking: any): string => {
     const childNames = booking.child_names.join(' and ');
     const date = new Date(booking.appointment_time);
@@ -169,19 +178,26 @@ const App: React.FC<AppProps> = ({ onNavigateToHistory }) => {
       hour12: true
     });
 
-    return `Jefferson Dental Confirmed
+    const orgName = activeConfig?.businessProfile?.organizationName || 'Jefferson Dental';
+    const address = activeConfig?.businessProfile?.address;
+    const locationStr = address
+      ? `${address.street}, ${address.city}`
+      : '123 Main St, Austin';
+    const phoneNumber = activeConfig?.businessProfile?.phoneNumber || '512-555-0100';
+
+    return `${orgName} Confirmed
 
 ${childNames}
 ${formattedTime}
 
 Location:
-123 Main St, Austin
+${locationStr}
 
 What to bring:
 • Medicaid cards for each child
 • Photo ID for parent
 
-Questions? Call 512-555-0100
+Questions? Call ${phoneNumber}
 
 Booking ID: ${booking.booking_id}`;
   };
@@ -199,14 +215,21 @@ Booking ID: ${booking.booking_id}`;
         console.log('📱 SMS CONFIRMATION REQUESTED - Showing SMS notification');
         setLastBookingId(requestTime.toString());
 
-        // Use the appointment_details directly from the SMS request
-        const formattedMessage = `Jefferson Dental Confirmed\n\n${smsRequest.appointmentDetails}\n\nLocation:\n123 Main St, Austin\n\nWhat to bring:\n• Medicaid cards for each child\n• Photo ID for parent\n\nQuestions? Call 512-555-0100`;
+        // Use dynamic config values for SMS message
+        const orgName = activeConfig?.businessProfile?.organizationName || 'Jefferson Dental';
+        const address = activeConfig?.businessProfile?.address;
+        const locationStr = address
+          ? `${address.street}, ${address.city}`
+          : '123 Main St, Austin';
+        const phoneNumber = activeConfig?.businessProfile?.phoneNumber || '512-555-0100';
+
+        const formattedMessage = `${orgName} Confirmed\n\n${smsRequest.appointmentDetails}\n\nLocation:\n${locationStr}\n\nWhat to bring:\n• Medicaid cards for each child\n• Photo ID for parent\n\nQuestions? Call ${phoneNumber}`;
 
         setSmsMessage(formattedMessage);
         setSmsVisible(true);
       }
     }
-  }, [transcriptItems, lastBookingId]);
+  }, [transcriptItems, lastBookingId, activeConfig]);
 
   // Handle SMS dismissal
   const handleSMSDismiss = () => {
@@ -306,12 +329,30 @@ Booking ID: ${booking.booking_id}`;
 
       {/* --- Floating Header --- */}
       <header className="fixed top-6 left-0 right-0 z-50 px-6 md:px-10 flex justify-between items-center">
-        <div className="flex items-center gap-2.5 bg-white/60 dark:bg-slate-800/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/40 dark:border-slate-700/70 shadow-sm">
-          <div className="bg-gradient-to-tr from-blue-600 to-indigo-500 dark:from-blue-500 dark:to-indigo-600 text-white p-1.5 rounded-lg shadow-lg shadow-blue-500/30">
-            <SparklesIcon className="w-5 h-5" />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 bg-white/60 dark:bg-slate-800/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/40 dark:border-slate-700/70 shadow-sm">
+            <div
+              className="text-white p-1.5 rounded-lg shadow-lg"
+              style={{
+                background: activeConfig?.businessProfile?.primaryColor
+                  ? `linear-gradient(to top right, ${activeConfig.businessProfile.primaryColor}, ${activeConfig.businessProfile.secondaryColor || activeConfig.businessProfile.primaryColor})`
+                  : 'linear-gradient(to top right, #2563eb, #6366f1)'
+              }}
+            >
+              <SparklesIcon className="w-5 h-5" />
+            </div>
+            <span className="font-bold text-slate-800 dark:text-slate-100 tracking-tight text-sm">
+              {activeConfig?.uiLabels?.headerText || activeConfig?.businessProfile?.organizationName || 'Jefferson Dental Clinics'}
+            </span>
+            <span className="text-xs font-medium text-blue-600 dark:text-blue-400 ml-1">
+              {activeConfig?.uiLabels?.headerBadge || '(Enhanced)'}
+            </span>
           </div>
-          <span className="font-bold text-slate-800 dark:text-slate-100 tracking-tight text-sm">Jefferson Dental Clinics</span>
-          <span className="text-xs font-medium text-blue-600 dark:text-blue-400 ml-1">(Enhanced)</span>
+
+          {/* Demo Config Selector */}
+          {!isConnected && (
+            <DemoConfigSelector onOpenWizard={() => setIsWizardOpen(true)} />
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -331,12 +372,12 @@ Booking ID: ${booking.booking_id}`;
           {/* Theme Toggle */}
           <ThemeToggle />
 
-          {/* Tool System Mode Indicator */}
-          <div className="flex items-center gap-2 bg-white/60 dark:bg-slate-800/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/40 dark:border-slate-700/70 shadow-sm">
+          {/* Tool System Mode Indicator - Hidden */}
+          {/* <div className="flex items-center gap-2 bg-white/60 dark:bg-slate-800/80 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/40 dark:border-slate-700/70 shadow-sm">
             <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
               {toolSystemMode === 'dynamic' ? '🔧 Dynamic' : toolSystemMode === 'static' ? '📦 Static' : '⏳ Loading'}
             </span>
-          </div>
+          </div> */}
 
           {/* Mode Selector - Only show when not connected */}
           {!isConnected && (
@@ -352,8 +393,8 @@ Booking ID: ${booking.booking_id}`;
               </select>
             </div>
           )}
-          {/* Provider Selection - Only show when not connected */}
-          {!isConnected && (
+          {/* Provider Selection - Hidden (OpenAI is default in background) */}
+          {/* {!isConnected && (
             <div className="flex items-center gap-2 bg-white/60 dark:bg-slate-800/80 backdrop-blur-md px-4 py-2 rounded-full border border-white/40 dark:border-slate-700/70 shadow-sm">
               <span className="text-xs font-medium text-slate-600 dark:text-slate-200">Provider:</span>
               <select
@@ -365,7 +406,7 @@ Booking ID: ${booking.booking_id}`;
                 <option value="gemini">Gemini</option>
               </select>
             </div>
-          )}
+          )} */}
 
           {/* Microphone Selection - Only show when not connected */}
           {!isConnected && audioDevices.length > 0 && (
@@ -434,16 +475,49 @@ Booking ID: ${booking.booking_id}`;
            <div className="flex flex-col items-center text-center space-y-12 max-w-3xl fade-enter-active">
               <div className="space-y-6">
                 <div className="inline-block px-3 py-1 rounded-full bg-blue-100/50 dark:bg-indigo-900/50 text-blue-700 dark:text-indigo-200 text-xs font-semibold tracking-wide border border-blue-200/50 dark:border-indigo-600/60 mb-2">
-                  MEDICAID OUTREACH DEMO • FUNCTION CALLING ENABLED
+                  {activeConfig?.uiLabels?.badgeText || 'VOICE AI DEMO'} • FUNCTION CALLING ENABLED
                 </div>
                 <h1 className="text-5xl md:text-7xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight leading-[1.1]">
-                   Proactive care for <br />
-                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-300 dark:to-indigo-300">every family.</span>
+                   {activeConfig?.uiLabels?.heroTitle ? (
+                     <>
+                       {activeConfig.uiLabels.heroTitle.split(' ').slice(0, -2).join(' ')} <br />
+                       <span
+                         className="text-transparent bg-clip-text"
+                         style={{
+                           backgroundImage: activeConfig?.businessProfile?.primaryColor
+                             ? `linear-gradient(to right, ${activeConfig.businessProfile.primaryColor}, ${activeConfig.businessProfile.secondaryColor || activeConfig.businessProfile.primaryColor})`
+                             : 'linear-gradient(to right, #2563eb, #6366f1)'
+                         }}
+                       >
+                         {activeConfig.uiLabels.heroTitle.split(' ').slice(-2).join(' ')}
+                       </span>
+                     </>
+                   ) : (
+                     <>
+                       Proactive care for <br />
+                       <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-300 dark:to-indigo-300">every family.</span>
+                     </>
+                   )}
                 </h1>
                 <p className="text-lg md:text-2xl text-slate-500 dark:text-slate-300 font-light max-w-2xl mx-auto leading-relaxed">
-                   Experience "Sophia", the AI agent with advanced capabilities: check availability, book appointments, query patient data, and send confirmations.
+                   {activeConfig?.uiLabels?.heroSubtitle || `Experience "${activeConfig?.agentConfig?.agentName || 'Sophia'}", the AI agent with advanced capabilities: check availability, book appointments, query patient data, and send confirmations.`}
                 </p>
               </div>
+
+              {/* HTTPS Warning for non-localhost access */}
+              {!isSecureContext && (
+                <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-xl px-6 py-4 max-w-xl mx-auto">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div className="text-left">
+                      <p className="text-amber-800 dark:text-amber-200 font-medium">Microphone requires HTTPS</p>
+                      <p className="text-amber-600 dark:text-amber-400 text-sm">Use <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">https://</code> or access via <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">localhost</code> for browser audio.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-500 dark:to-indigo-600 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
@@ -462,7 +536,7 @@ Booking ID: ${booking.booking_id}`;
                       <PhoneIcon className="w-6 h-6" />
                     )}
                   </span>
-                  {mode === 'telephony' && isInitiatingCall ? 'Initiating Call...' : mode === 'browser' ? 'Start Browser Demo' : 'Initiate Phone Call'}
+                  {mode === 'telephony' && isInitiatingCall ? 'Initiating Call...' : mode === 'browser' ? (activeConfig?.uiLabels?.callButtonText || 'Start Browser Demo') : 'Initiate Phone Call'}
                 </button>
               </div>
 
@@ -523,8 +597,37 @@ Booking ID: ${booking.booking_id}`;
 
       {/* --- Minimal Footer --- */}
       <footer className="fixed bottom-4 left-0 right-0 z-0 flex justify-center pointer-events-none">
-          <span className="text-[10px] text-slate-400 font-medium opacity-50">Jefferson Dental Clinics • Enhanced Demo • Function Calling + CRM + Scheduling</span>
+          <span className="text-[10px] text-slate-400 font-medium opacity-50">
+            {activeConfig?.businessProfile?.organizationName || 'Jefferson Dental Clinics'} • {activeConfig?.uiLabels?.footerText || 'Enhanced Demo'} • Function Calling + CRM + Scheduling
+          </span>
       </footer>
+
+      {/* --- Demo Wizard Modal --- */}
+      {isWizardOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-hidden bg-white dark:bg-slate-900 rounded-2xl shadow-2xl">
+            {/* Close button */}
+            <button
+              onClick={() => setIsWizardOpen(false)}
+              className="absolute top-4 right-4 z-10 p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Wizard content */}
+            <div className="overflow-y-auto max-h-[90vh]">
+              <DemoWizard
+                onComplete={() => {
+                  setIsWizardOpen(false);
+                }}
+                onCancel={() => setIsWizardOpen(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

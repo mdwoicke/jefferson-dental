@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useActiveDemoConfig } from '../contexts/DemoConfigContext';
 
 interface TranscriptMessage {
   id: string;
@@ -68,6 +69,7 @@ const ChevronDownIcon = ({ isOpen }: { isOpen: boolean }) => (
 export function TranscriptPanel({ items, isCallActive }: TranscriptPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const { activeConfig } = useActiveDemoConfig();
 
   // BULLETPROOF ORDERING: Sort items by createdAt timestamp (primary) and sequenceNumber (secondary)
   // This ensures transcript items always appear in chronological order based on when they occurred,
@@ -105,7 +107,10 @@ export function TranscriptPanel({ items, isCallActive }: TranscriptPanelProps) {
   };
 
   const getSpeakerLabel = (role: 'user' | 'assistant') => {
-    return role === 'assistant' ? 'Agent (Sophia)' : 'Parent';
+    if (role === 'assistant') {
+      return activeConfig?.uiLabels?.agentSpeakerLabel || `Agent (${activeConfig?.agentConfig?.agentName || 'Sophia'})`;
+    }
+    return activeConfig?.uiLabels?.userSpeakerLabel || 'Parent';
   };
 
   const getSpeakerColor = (role: 'user' | 'assistant') => {

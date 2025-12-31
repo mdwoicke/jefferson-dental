@@ -46,7 +46,11 @@ app.use(cors({
     'http://10.255.255.254:5174',   // Alternative network interface port 5174 (HTTP)
     'https://10.255.255.254:5174',   // Alternative network interface port 5174 (HTTPS)
     'http://10.255.255.254:5176',   // Alternative network interface port 5176 (HTTP)
-    'https://10.255.255.254:5176'   // Alternative network interface port 5176 (HTTPS)
+    'https://10.255.255.254:5176',   // Alternative network interface port 5176 (HTTPS)
+    'http://192.168.1.247:5173',    // Local network IP (HTTP)
+    'https://192.168.1.247:5173',   // Local network IP (HTTPS)
+    'http://192.168.1.247:3001',    // Local network API (HTTP)
+    'https://192.168.1.247:3001'    // Local network API (HTTPS)
   ],
   credentials: true
 }));

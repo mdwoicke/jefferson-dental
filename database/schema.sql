@@ -384,3 +384,151 @@ LEFT JOIN call_metrics cm ON c.id = cm.conversation_id
 LEFT JOIN function_calls fc ON c.id = fc.conversation_id
 LEFT JOIN skill_execution_logs sel ON c.id = sel.conversation_id
 GROUP BY c.id;
+
+-- ============================================================================
+-- DEMO CONFIGURATIONS TABLE (v4)
+-- Stores different demo scenarios that can be selected at runtime
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS demo_configs (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  is_active INTEGER DEFAULT 0,
+  is_default INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_demo_configs_slug ON demo_configs(slug);
+CREATE INDEX IF NOT EXISTS idx_demo_configs_active ON demo_configs(is_active);
+
+-- ============================================================================
+-- DEMO BUSINESS PROFILES TABLE (v4)
+-- Organization information for each demo
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS demo_business_profiles (
+  id TEXT PRIMARY KEY,
+  demo_config_id TEXT NOT NULL UNIQUE,
+  organization_name TEXT NOT NULL,
+  address_street TEXT NOT NULL,
+  address_city TEXT NOT NULL,
+  address_state TEXT NOT NULL,
+  address_zip TEXT NOT NULL,
+  phone_number TEXT NOT NULL,
+  logo_url TEXT,
+  primary_color TEXT DEFAULT '#3B82F6',
+  secondary_color TEXT DEFAULT '#6366F1',
+  hours_json TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (demo_config_id) REFERENCES demo_configs(id) ON DELETE CASCADE
+);
+
+-- ============================================================================
+-- DEMO AGENT CONFIGS TABLE (v4)
+-- AI agent settings for each demo
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS demo_agent_configs (
+  id TEXT PRIMARY KEY,
+  demo_config_id TEXT NOT NULL UNIQUE,
+  agent_name TEXT NOT NULL DEFAULT 'Sophia',
+  voice_name TEXT NOT NULL DEFAULT 'alloy',
+  personality_description TEXT,
+  system_prompt TEXT NOT NULL,
+  opening_script TEXT,
+  closing_script TEXT,
+  objection_handling_json TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (demo_config_id) REFERENCES demo_configs(id) ON DELETE CASCADE
+);
+
+-- ============================================================================
+-- DEMO SCENARIOS TABLE (v4)
+-- Call scenario details for each demo
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS demo_scenarios (
+  id TEXT PRIMARY KEY,
+  demo_config_id TEXT NOT NULL UNIQUE,
+  call_direction TEXT NOT NULL CHECK(call_direction IN ('inbound', 'outbound')),
+  use_case TEXT NOT NULL,
+  target_audience TEXT,
+  demo_patient_data_json TEXT,
+  key_talking_points_json TEXT,
+  edge_cases_json TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (demo_config_id) REFERENCES demo_configs(id) ON DELETE CASCADE
+);
+
+-- ============================================================================
+-- DEMO TOOL CONFIGS TABLE (v4)
+-- Tool/function configurations for each demo
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS demo_tool_configs (
+  id TEXT PRIMARY KEY,
+  demo_config_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  tool_type TEXT NOT NULL CHECK(tool_type IN ('predefined', 'custom')),
+  is_enabled INTEGER DEFAULT 1,
+  display_name TEXT,
+  description TEXT,
+  parameters_schema_json TEXT,
+  mock_response_template TEXT,
+  mock_response_delay_ms INTEGER DEFAULT 300,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (demo_config_id) REFERENCES demo_configs(id) ON DELETE CASCADE,
+  UNIQUE(demo_config_id, tool_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_demo_tool_configs_demo ON demo_tool_configs(demo_config_id);
+CREATE INDEX IF NOT EXISTS idx_demo_tool_configs_type ON demo_tool_configs(tool_type);
+
+-- ============================================================================
+-- DEMO SMS TEMPLATES TABLE (v4)
+-- SMS message templates for each demo
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS demo_sms_templates (
+  id TEXT PRIMARY KEY,
+  demo_config_id TEXT NOT NULL,
+  template_type TEXT NOT NULL CHECK(template_type IN ('confirmation', 'reminder', 'cancellation', 'custom')),
+  template_name TEXT NOT NULL,
+  sender_name TEXT NOT NULL DEFAULT 'Demo Clinic',
+  message_template TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (demo_config_id) REFERENCES demo_configs(id) ON DELETE CASCADE,
+  UNIQUE(demo_config_id, template_type, template_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_demo_sms_templates_demo ON demo_sms_templates(demo_config_id);
+
+-- ============================================================================
+-- DEMO UI LABELS TABLE (v4)
+-- UI text customization for each demo
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS demo_ui_labels (
+  id TEXT PRIMARY KEY,
+  demo_config_id TEXT NOT NULL UNIQUE,
+  header_text TEXT DEFAULT 'Demo Clinic',
+  header_badge TEXT DEFAULT '(Enhanced)',
+  footer_text TEXT DEFAULT 'Enhanced Demo',
+  hero_title TEXT DEFAULT 'Proactive care for every family',
+  hero_subtitle TEXT,
+  user_speaker_label TEXT DEFAULT 'Caller',
+  agent_speaker_label TEXT DEFAULT 'Agent',
+  call_button_text TEXT DEFAULT 'Start Demo Call',
+  end_call_button_text TEXT DEFAULT 'End Call',
+  badge_text TEXT DEFAULT 'VOICE AI DEMO',
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (demo_config_id) REFERENCES demo_configs(id) ON DELETE CASCADE
+);
+
+-- Trigger to update demo_configs.updated_at
+CREATE TRIGGER IF NOT EXISTS update_demo_configs_timestamp
+AFTER UPDATE ON demo_configs
+FOR EACH ROW
+BEGIN
+  UPDATE demo_configs SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
+
+-- Insert schema version for demo wizard
+INSERT OR IGNORE INTO schema_version (version, description) VALUES
+(4, 'Added demo configuration tables for Demo Wizard feature - demo_configs, demo_business_profiles, demo_agent_configs, demo_scenarios, demo_tool_configs, demo_sms_templates, demo_ui_labels');

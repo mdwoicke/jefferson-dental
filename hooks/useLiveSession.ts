@@ -6,6 +6,7 @@ import { decodeAudioData } from '../utils/audio-utils';
 import { PromptBuilder } from '../utils/prompt-builder';
 import { CRMService } from '../services/crm-service';
 import type { PatientRecord } from '../database/db-interface';
+import type { DemoConfig } from '../types/demo-config';
 
 export interface AudioDevice {
   deviceId: string;
@@ -46,7 +47,8 @@ export const useLiveSession = (
   provider: VoiceProvider = 'openai',
   selectedPatientId?: string | null,
   dbAdapter?: any,
-  onToolSystemMode?: (mode: string) => void
+  onToolSystemMode?: (mode: string) => void,
+  demoConfig?: DemoConfig | null
 ) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -58,6 +60,7 @@ export const useLiveSession = (
   const [toolSystemMode, setToolSystemMode] = useState<string>('unknown');
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [isSecureContext, setIsSecureContext] = useState<boolean>(true);
 
   // Use ref to keep dbAdapter current (fixes stale closure issue)
   const dbAdapterRef = useRef(dbAdapter);
@@ -105,6 +108,13 @@ export const useLiveSession = (
   // Enumerate available audio input devices
   const enumerateAudioDevices = useCallback(async () => {
     try {
+      // Check if mediaDevices is available (requires secure context: HTTPS or localhost)
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn('🎤 Media devices not available - requires HTTPS or localhost');
+        setIsSecureContext(false);
+        return [];
+      }
+
       // First request permission to get device labels
       const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       tempStream.getTracks().forEach(track => track.stop());
@@ -578,12 +588,13 @@ export const useLiveSession = (
       inputSourceRef.current = source;
       console.log('✅ MediaStreamSource created');
 
-      // Build dynamic prompt based on patient data
+      // Build dynamic prompt based on patient data and demo config
       const systemInstruction = patientData
-        ? PromptBuilder.buildOutboundCallPrompt(patientData)
-        : PromptBuilder.buildFallbackPrompt();
+        ? PromptBuilder.buildOutboundCallPrompt(patientData, demoConfig || undefined)
+        : PromptBuilder.buildFallbackPrompt(demoConfig || undefined);
 
       console.log('📝 Using dynamic prompt for:', patientData?.parentName || 'unknown caller');
+      console.log('📝 Demo config:', demoConfig?.name || 'default (Jefferson Dental)');
 
       // Create provider instance with database adapter for function calling
       console.log('🎤 Creating voice provider with dbAdapter:', dbAdapterRef.current ? 'AVAILABLE ✅' : 'NULL ❌');
@@ -600,14 +611,16 @@ export const useLiveSession = (
         console.log('✅ Patient context set on provider');
       }
 
-      // Configure provider
+      // Configure provider with tool configs from demo
       const config: ProviderConfig = {
         provider,
         apiKey,
         model: provider === 'openai' ? OPENAI_MODEL : GEMINI_MODEL,
         voiceName: provider === 'openai' ? OPENAI_VOICE : GEMINI_VOICE,
-        systemInstruction // Use dynamic prompt instead of static DENTAL_IVA_PROMPT
+        systemInstruction, // Use dynamic prompt instead of static DENTAL_IVA_PROMPT
+        toolConfigs: demoConfig?.toolConfigs || [] // Pass tool configs from demo
       };
+      console.log('🔧 Tool configs passed to provider:', config.toolConfigs?.length || 0, 'tools configured');
 
       // Script Processor for Input (4096 buffer size)
       const scriptProcessor = inputCtx.createScriptProcessor(4096, 1, 1);
@@ -754,7 +767,7 @@ export const useLiveSession = (
       setIsLoadingPatient(false);
       cleanupAudio();
     }
-  }, [provider, selectedPatientId, dbAdapter, disconnect, cleanupAudio, playOfficeAmbience, stopBackgroundNoise, handleTranscript, handleFunctionCall, handleFunctionResult]);
+  }, [provider, selectedPatientId, dbAdapter, demoConfig, disconnect, cleanupAudio, playOfficeAmbience, stopBackgroundNoise, handleTranscript, handleFunctionCall, handleFunctionResult]);
 
   return {
     connect,
@@ -773,6 +786,8 @@ export const useLiveSession = (
     audioDevices,
     selectedDeviceId,
     setSelectedDeviceId,
-    enumerateAudioDevices
+    enumerateAudioDevices,
+    // Secure context check (HTTPS required for microphone on non-localhost)
+    isSecureContext
   };
 };

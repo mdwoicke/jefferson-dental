@@ -4,6 +4,8 @@ import { AdminLayout } from './AdminLayout';
 import { PatientList } from './PatientList';
 import { PatientForm } from './PatientForm';
 import { DataViewer } from './DataViewer';
+import { ManageDemos } from './ManageDemos';
+import { DemoEditForm } from './DemoEditForm';
 import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog';
 import { ToastContainer } from '../components/Toast';
 import { useToast } from '../hooks/useToast';
@@ -264,6 +266,7 @@ const PatientListPage: React.FC = () => {
 };
 
 export const AdminDashboard: React.FC = () => {
+  console.log('AdminDashboard: Rendering');
   return (
     <AdminLayout>
       <Routes>
@@ -272,6 +275,9 @@ export const AdminDashboard: React.FC = () => {
         <Route path="patients/new" element={<PatientForm />} />
         <Route path="patients/:id/edit" element={<PatientForm />} />
         <Route path="data-viewer" element={<DataViewer />} />
+        <Route path="demos" element={<ManageDemos />} />
+        <Route path="demos/:id/edit" element={<DemoEditForm />} />
+        <Route path="demos/new" element={<DemoEditForm />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </AdminLayout>
