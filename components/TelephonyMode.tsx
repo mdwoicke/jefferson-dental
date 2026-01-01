@@ -6,6 +6,7 @@ import { AppointmentSummaryCard } from './AppointmentSummaryCard';
 import { ThemeToggle } from './ThemeToggle';
 import IPhoneCallScreen from './IPhoneCallScreen';
 import { useTheme } from '../contexts/ThemeContext';
+import { useActiveDemoConfig } from '../contexts/DemoConfigContext';
 import { extractSuccessfulBookings, extractSMSConfirmationRequest } from '../utils/appointment-utils';
 
 interface TranscriptMessage {
@@ -86,9 +87,30 @@ const ArrowPathIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+// OpenAI Realtime API available voices
+const OPENAI_REALTIME_VOICES = [
+  { id: 'alloy', name: 'Alloy', description: 'Neutral, balanced' },
+  { id: 'ash', name: 'Ash', description: 'Warm, conversational' },
+  { id: 'ballad', name: 'Ballad', description: 'Soft, melodic' },
+  { id: 'coral', name: 'Coral', description: 'Clear, friendly' },
+  { id: 'echo', name: 'Echo', description: 'Smooth, professional' },
+  { id: 'sage', name: 'Sage', description: 'Calm, wise' },
+  { id: 'shimmer', name: 'Shimmer', description: 'Bright, energetic' },
+  { id: 'verse', name: 'Verse', description: 'Dynamic, expressive' },
+] as const;
+
+// Gemini available voices
+const GEMINI_VOICES = [
+  { id: 'Zephyr', name: 'Zephyr', description: 'Default Gemini voice' },
+] as const;
+
 export const TelephonyMode: React.FC<TelephonyModeProps> = ({ provider, onProviderChange }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [selectedVoice, setSelectedVoice] = useState('alloy');
   const [transcripts, setTranscripts] = useState<TranscriptMessage[]>([]);
+
+  // Get active demo config for dynamic system prompts
+  const { activeConfig } = useActiveDemoConfig();
 
   // SMS Notification state
   const [smsMessage, setSmsMessage] = useState<string>('');
@@ -99,6 +121,12 @@ export const TelephonyMode: React.FC<TelephonyModeProps> = ({ provider, onProvid
   const [apiFunctionCallItems, setApiFunctionCallItems] = useState<FunctionCallItem[]>([]);
 
   const { callId, callState, callDuration, error, conversationId, functionCallItems, transcriptItems, initiateCall, endCall } = useTelephonySession();
+
+  // ============================================================================
+  // AMBIENT AUDIO FOR TELEPHONY MODE
+  // Note: Ambient audio is now mixed on the backend (AudioBridge + AmbientAudioMixer)
+  // and sent through the phone call, not played locally in the browser.
+  // ============================================================================
 
   // BULLETPROOF ORDERING: Merge and sort by createdAt timestamp (primary) and sequenceNumber (secondary)
   // This ensures transcript items always appear in chronological order based on when they occurred,
@@ -241,7 +269,12 @@ export const TelephonyMode: React.FC<TelephonyModeProps> = ({ provider, onProvid
         setLastBookingId(requestTime.toString());
 
         // Use the appointment_details directly from the SMS request
-        const formattedMessage = `Jefferson Dental Confirmed\n\n${smsRequest.appointmentDetails}\n\nLocation:\n123 Main St, Austin\n\nWhat to bring:\n• Medicaid cards for each child\n• Photo ID for parent\n\nQuestions? Call 512-555-0100`;
+        const orgName = activeConfig?.businessProfile?.organizationName || 'Appointment';
+        const orgPhone = activeConfig?.businessProfile?.phoneNumber || '';
+        const address = activeConfig?.businessProfile?.address;
+        const locationStr = address ? `${address.street || ''}\n${address.city || ''}, ${address.state || ''} ${address.zip || ''}`.trim() : '';
+
+        const formattedMessage = `${orgName} Confirmed\n\n${smsRequest.appointmentDetails}${locationStr ? `\n\nLocation:\n${locationStr}` : ''}${orgPhone ? `\n\nQuestions? Call ${orgPhone}` : ''}`;
 
         setSmsMessage(formattedMessage);
         setSmsVisible(true);
@@ -271,7 +304,42 @@ export const TelephonyMode: React.FC<TelephonyModeProps> = ({ provider, onProvid
     // Clear previous transcripts when starting a new call
     setTranscripts([]);
 
-    await initiateCall({ phoneNumber, provider });
+    // Build simplified demo config for telephony API
+    // Use selected voice from dropdown, falling back to demo config or default
+    const voiceToUse = selectedVoice || activeConfig?.agentConfig?.voiceName || (provider === 'openai' ? 'alloy' : 'Zephyr');
+
+    const demoConfig = activeConfig ? {
+      id: activeConfig.id,
+      name: activeConfig.name,
+      slug: activeConfig.slug,
+      businessProfile: {
+        organizationName: activeConfig.businessProfile?.organizationName,
+        phoneNumber: activeConfig.businessProfile?.phoneNumber,
+        address: activeConfig.businessProfile?.address,
+      },
+      agentConfig: {
+        agentName: activeConfig.agentConfig?.agentName,
+        voiceName: voiceToUse,
+        systemPrompt: activeConfig.agentConfig?.systemPrompt,
+      },
+      toolConfigs: activeConfig.toolConfigs,
+      mockDataPools: activeConfig.mockDataPools,
+      ambientAudio: activeConfig.ambientAudio, // Pass ambient audio config to backend
+    } : {
+      agentConfig: {
+        voiceName: voiceToUse,
+      }
+    };
+
+    console.log(`📞 Initiating telephony call with demo config: ${demoConfig?.name || 'default'}`);
+    console.log(`   Provider: ${provider}`);
+    console.log(`   Voice: ${voiceToUse}`);
+    console.log(`   Active Config ID: ${activeConfig?.id}`);
+    console.log(`   Active Config Agent Name: ${activeConfig?.agentConfig?.agentName}`);
+    console.log(`   Active Config System Prompt Length: ${activeConfig?.agentConfig?.systemPrompt?.length || 0}`);
+    console.log(`   Ambient Audio: ${activeConfig?.ambientAudio ? `enabled=${activeConfig.ambientAudio.enabled}, volume=${activeConfig.ambientAudio.volume}` : 'not configured'}`);
+    console.log(`   demoConfig being sent:`, JSON.stringify(demoConfig, null, 2).substring(0, 500));
+    await initiateCall({ phoneNumber, provider, demoConfig });
   };
 
   const formatDuration = (seconds: number): string => {
@@ -354,7 +422,7 @@ export const TelephonyMode: React.FC<TelephonyModeProps> = ({ provider, onProvid
           <div className="bg-gradient-to-tr from-blue-600 to-indigo-500 dark:from-blue-500 dark:to-indigo-600 text-white p-1.5 rounded-lg shadow-lg shadow-blue-500/30">
             <SparklesIcon className="w-5 h-5" />
           </div>
-          <span className="font-bold text-slate-800 dark:text-slate-100 tracking-tight text-sm">Jefferson Dental Clinics</span>
+          <span className="font-bold text-slate-800 dark:text-slate-100 tracking-tight text-sm">{activeConfig?.businessProfile?.organizationName || 'AI Voice Agent'}</span>
           <span className="text-xs font-medium text-blue-600 dark:text-blue-400 ml-1">(Phone)</span>
         </div>
 
@@ -410,7 +478,7 @@ export const TelephonyMode: React.FC<TelephonyModeProps> = ({ provider, onProvid
                 isConnected={callState === CallState.CONNECTED}
                 isMuted={false}
                 callDuration={callDuration}
-                contactName="Sophia"
+                contactName={activeConfig?.agentConfig?.agentName || 'AI Agent'}
                 hasCallEnded={callState === CallState.ENDED}
                 smsMessage={smsMessage}
                 smsVisible={smsVisible}
@@ -432,7 +500,7 @@ export const TelephonyMode: React.FC<TelephonyModeProps> = ({ provider, onProvid
                   Outbound Calls
                 </h1>
                 <p className="text-slate-600 dark:text-slate-300 font-light">
-                  Place real phone calls with AI agent Sophia
+                  Place real phone calls with {activeConfig?.agentConfig?.agentName || 'AI agent'}
                 </p>
               </div>
 
@@ -503,11 +571,42 @@ export const TelephonyMode: React.FC<TelephonyModeProps> = ({ provider, onProvid
                   </label>
                   <select
                     value={provider}
-                    onChange={(e) => onProviderChange(e.target.value as VoiceProvider)}
+                    onChange={(e) => {
+                      const newProvider = e.target.value as VoiceProvider;
+                      onProviderChange(newProvider);
+                      // Reset voice to default for new provider
+                      setSelectedVoice(newProvider === 'openai' ? 'alloy' : 'Zephyr');
+                    }}
                     className="w-full px-5 py-4 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-500 focus:border-transparent text-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm transition-all font-semibold text-slate-800 dark:text-slate-200 cursor-pointer"
                   >
-                    <option value="openai">OpenAI (Sophia - Alloy)</option>
-                    <option value="gemini">Gemini (Sophia - Zephyr)</option>
+                    <option value="openai">OpenAI Realtime</option>
+                    <option value="gemini">Google Gemini</option>
+                  </select>
+                </div>
+
+                {/* Voice Selection */}
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 tracking-tight">
+                    Voice
+                  </label>
+                  <select
+                    value={selectedVoice}
+                    onChange={(e) => setSelectedVoice(e.target.value)}
+                    className="w-full px-5 py-4 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-500 focus:border-transparent text-lg bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm transition-all font-semibold text-slate-800 dark:text-slate-200 cursor-pointer"
+                  >
+                    {provider === 'openai' ? (
+                      OPENAI_REALTIME_VOICES.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name} - {voice.description}
+                        </option>
+                      ))
+                    ) : (
+                      GEMINI_VOICES.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.name} - {voice.description}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -612,7 +711,7 @@ export const TelephonyMode: React.FC<TelephonyModeProps> = ({ provider, onProvid
       {/* --- Minimal Footer --- */}
       <footer className="fixed bottom-4 left-0 right-0 z-0 flex justify-center pointer-events-none">
         <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium opacity-50">
-          Jefferson Dental Clinics • Phone Mode • Real Outbound Calls
+          {activeConfig?.businessProfile?.organizationName || 'AI Voice Agent'} • Phone Mode • Real Outbound Calls
         </span>
       </footer>
 

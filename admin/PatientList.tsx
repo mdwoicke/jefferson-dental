@@ -88,7 +88,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Initializing database...</p>
+          <p className="text-slate-600 dark:text-slate-400">Initializing database...</p>
         </div>
       </div>
     );
@@ -99,7 +99,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading patients...</p>
+          <p className="text-slate-600 dark:text-slate-400">Loading patients...</p>
         </div>
       </div>
     );
@@ -110,8 +110,8 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Patients</h1>
-          <p className="text-slate-600 mt-1">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Patients</h1>
+          <p className="text-slate-600 dark:text-slate-400 mt-1">
             {filteredPatients.length} {filteredPatients.length === 1 ? 'patient' : 'patients'}
             {searchQuery && ' found'}
           </p>
@@ -128,7 +128,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
       </div>
 
       {/* Search Bar */}
-      <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-4 shadow-lg border border-slate-200">
+      <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-lg border border-slate-200 dark:border-slate-700">
         <div className="relative">
           <svg
             className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400"
@@ -148,12 +148,12 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
             placeholder="Search by name, phone, or city..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border-2 border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+            className="w-full pl-10 pr-4 py-2 border-2 border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 rounded-full transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-full transition-colors"
             >
               <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -165,8 +165,8 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
 
       {/* Patient Table */}
       {filteredPatients.length === 0 ? (
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-12 shadow-lg border border-slate-200 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-12 shadow-lg border border-slate-200 dark:border-slate-700 text-center">
+          <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
@@ -176,10 +176,10 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
               />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-slate-900 mb-2">
+          <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
             {searchQuery ? 'No patients found' : 'No patients yet'}
           </h3>
-          <p className="text-slate-600 mb-4">
+          <p className="text-slate-600 dark:text-slate-400 mb-4">
             {searchQuery
               ? 'Try adjusting your search criteria'
               : 'Get started by adding your first patient'}
@@ -197,40 +197,40 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
           )}
         </div>
       ) : (
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-slate-100 border-b border-slate-200">
+              <thead className="bg-slate-100 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Parent Name</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Phone</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Address</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Children</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700">Last Visit</th>
-                  <th className="px-6 py-4 text-right text-sm font-semibold text-slate-700">Actions</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Parent Name</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Phone</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Address</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Children</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">Last Visit</th>
+                  <th className="px-6 py-4 text-right text-sm font-semibold text-slate-700 dark:text-slate-300">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredPatients.map((patient) => (
                   <React.Fragment key={patient.id}>
-                    <tr className="hover:bg-slate-50 transition-colors">
+                    <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-slate-900">{patient.parentName}</div>
+                        <div className="font-semibold text-slate-900 dark:text-white">{patient.parentName}</div>
                         {patient.preferredLanguage && patient.preferredLanguage !== 'English' && (
-                          <div className="text-xs text-slate-500 mt-1">
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                             Speaks {patient.preferredLanguage}
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-slate-600">{patient.phoneNumber}</td>
-                      <td className="px-6 py-4 text-slate-600">
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{patient.phoneNumber}</td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
                         <div>{patient.address.city}, {patient.address.state}</div>
-                        <div className="text-xs text-slate-500">{patient.address.zip}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">{patient.address.zip}</div>
                       </td>
                       <td className="px-6 py-4">
                         <button
                           onClick={() => toggleRow(patient.id)}
-                          className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 hover:bg-green-200 text-green-700 text-sm font-semibold rounded-full transition-colors"
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-800/40 text-green-700 dark:text-green-400 text-sm font-semibold rounded-full transition-colors"
                         >
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
@@ -251,15 +251,15 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
                           </svg>
                         </button>
                       </td>
-                      <td className="px-6 py-4 text-slate-600">
-                        {patient.lastVisit || <span className="text-slate-400">Never</span>}
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
+                        {patient.lastVisit || <span className="text-slate-400 dark:text-slate-500">Never</span>}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => handleCallPatient(patient)}
                             disabled={callingPatients.has(patient.id)}
-                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="p-2 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Call patient (outbound)"
                           >
                             {callingPatients.has(patient.id) ? (
@@ -274,7 +274,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
                           </button>
                           <Link
                             to={`/admin/patients/${patient.id}/edit`}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                             title="Edit patient"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -288,7 +288,7 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
                           </Link>
                           <button
                             onClick={() => onDeleteRequest(patient)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                             title="Delete patient"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -304,29 +304,29 @@ export const PatientList: React.FC<PatientListProps> = ({ onDeleteRequest }) => 
                       </td>
                     </tr>
                     {expandedRows.has(patient.id) && patient.children.length > 0 && (
-                      <tr className="bg-slate-50">
+                      <tr className="bg-slate-50 dark:bg-slate-700/30">
                         <td colSpan={6} className="px-6 py-4">
                           <div className="pl-4">
-                            <h4 className="text-sm font-semibold text-slate-700 mb-3">Children</h4>
+                            <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Children</h4>
                             <div className="space-y-2">
                               {patient.children.map((child) => (
                                 <div
                                   key={child.id}
-                                  className="flex items-center gap-4 p-3 bg-white rounded-lg border border-slate-200"
+                                  className="flex items-center gap-4 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-600"
                                 >
                                   <div className="flex-1">
-                                    <div className="font-semibold text-slate-900">{child.name}</div>
-                                    <div className="text-sm text-slate-600">
+                                    <div className="font-semibold text-slate-900 dark:text-white">{child.name}</div>
+                                    <div className="text-sm text-slate-600 dark:text-slate-400">
                                       Age {child.age}
                                       {child.date_of_birth && ` • DOB: ${child.date_of_birth}`}
                                     </div>
                                   </div>
-                                  <div className="text-sm text-slate-600">
-                                    <div className="text-xs text-slate-500">Medicaid ID</div>
+                                  <div className="text-sm text-slate-600 dark:text-slate-300">
+                                    <div className="text-xs text-slate-500 dark:text-slate-400">Medicaid ID</div>
                                     <div className="font-mono">{child.medicaid_id}</div>
                                   </div>
                                   {child.special_needs && (
-                                    <div className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
+                                    <div className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-xs font-semibold rounded">
                                       Special Needs
                                     </div>
                                   )}

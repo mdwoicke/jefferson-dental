@@ -128,8 +128,11 @@ export class CallManager extends EventEmitter {
 
   /**
    * Initiate an outbound call
+   * @param phoneNumber - The phone number to call
+   * @param aiProvider - The AI provider to use (openai or gemini)
+   * @param demoConfig - Optional demo configuration with custom system prompt
    */
-  async initiateCall(phoneNumber: string, aiProvider: VoiceProvider): Promise<string> {
+  async initiateCall(phoneNumber: string, aiProvider: VoiceProvider, demoConfig?: any): Promise<string> {
     const callId = this.generateCallId();
 
     console.log(`\n${'='.repeat(60)}`);
@@ -137,6 +140,10 @@ export class CallManager extends EventEmitter {
     console.log(`   Call ID: ${callId}`);
     console.log(`   To: ${phoneNumber}`);
     console.log(`   AI Provider: ${aiProvider}`);
+    console.log(`   Demo Config: ${demoConfig?.name || 'None (using defaults)'}`);
+    console.log(`   Demo Config Agent Name: ${demoConfig?.agentConfig?.agentName || 'None'}`);
+    console.log(`   Demo Config System Prompt Length: ${demoConfig?.agentConfig?.systemPrompt?.length || 0} chars`);
+    console.log(`   Demo Config System Prompt Preview: ${demoConfig?.agentConfig?.systemPrompt?.substring(0, 100) || 'EMPTY'}...`);
     console.log(`${'='.repeat(60)}\n`);
 
     // Fetch patient data from database
@@ -154,12 +161,12 @@ export class CallManager extends EventEmitter {
       console.error(`❌ Error loading patient data:`, error);
     }
 
-    // Build dynamic prompt
+    // Build dynamic prompt - now supports custom systemPrompt from demo config
     const systemInstruction = patientData
-      ? PromptBuilder.buildOutboundCallPrompt(patientData)
-      : DENTAL_IVA_PROMPT; // Fallback to static prompt
+      ? PromptBuilder.buildOutboundCallPrompt(patientData, demoConfig)
+      : (demoConfig ? PromptBuilder.buildFallbackPrompt(demoConfig) : DENTAL_IVA_PROMPT);
 
-    console.log(`📝 Using ${patientData ? 'dynamic' : 'fallback'} prompt for call`);
+    console.log(`📝 Using ${demoConfig?.agentConfig?.systemPrompt ? 'CUSTOM' : patientData ? 'dynamic' : 'fallback'} prompt for call`);
     console.log(`\n${'='.repeat(60)}`);
     console.log(`SYSTEM INSTRUCTION BEING USED:`);
     console.log(`${'='.repeat(60)}`);
@@ -173,7 +180,8 @@ export class CallManager extends EventEmitter {
       state: CallState.DIALING,
       direction: 'outbound', // Mark as outbound call
       patientData, // Store patient data in session
-      systemInstruction // Store dynamic prompt in session
+      systemInstruction, // Store dynamic prompt in session
+      demoConfig // Store demo config for tool configuration
     };
 
     this.activeCalls.set(callId, session);
@@ -251,12 +259,21 @@ export class CallManager extends EventEmitter {
       }
 
       // Connect AI provider with dynamic prompt from session
+      // Use voice from demoConfig if provided, otherwise fall back to defaults
+      const defaultVoice = session.aiProvider === 'openai' ? OPENAI_VOICE : GEMINI_VOICE;
+      const voiceToUse = session.demoConfig?.agentConfig?.voiceName || defaultVoice;
+      console.log(`🎙️ Using voice: ${voiceToUse} (from demoConfig: ${!!session.demoConfig?.agentConfig?.voiceName})`);
+
       const providerConfig: ProviderConfig = {
         provider: session.aiProvider,
         apiKey: session.aiProvider === 'openai' ? config.ai.openaiKey : config.ai.geminiKey,
         model: session.aiProvider === 'openai' ? OPENAI_MODEL : GEMINI_MODEL,
         systemInstruction: session.systemInstruction || DENTAL_IVA_PROMPT, // Use dynamic prompt from session
-        voiceName: session.aiProvider === 'openai' ? OPENAI_VOICE : GEMINI_VOICE
+        voiceName: voiceToUse,
+        toolConfigs: session.demoConfig?.toolConfigs, // Pass tool configs from demo
+        mockDataPools: session.demoConfig?.mockDataPools, // Pass mock data pools from demo
+        demoConfigId: session.demoConfig?.id, // Pass demo config ID
+        demoSlug: session.demoConfig?.slug // Pass demo type identifier
       };
 
       await aiProvider.connect(providerConfig, {
@@ -347,8 +364,10 @@ export class CallManager extends EventEmitter {
         }
       });
 
-      // Create and start audio bridge
-      const bridge = new AudioBridge(mediaStream, aiProvider, session.aiProvider);
+      // Create and start audio bridge (with ambient audio if configured)
+      const ambientConfig = session.demoConfig?.ambientAudio;
+      console.log(`🔊 Ambient audio config:`, ambientConfig ? `enabled=${ambientConfig.enabled}, volume=${ambientConfig.volume}` : 'none');
+      const bridge = new AudioBridge(mediaStream, aiProvider, session.aiProvider, ambientConfig);
       this.bridges.set(session.id, bridge);
 
       bridge.on('bridgeStopped', () => {

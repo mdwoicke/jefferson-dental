@@ -27,11 +27,59 @@ export interface CallSession {
   patientData?: PatientRecord | null;
   systemInstruction?: string;
   conversationId?: string; // For fetching transcripts
+  demoConfig?: DemoConfigLite; // Demo config for tool configuration
+}
+
+// Tool configuration from demo config
+export interface ToolConfigLite {
+  toolName: string;
+  toolType: 'predefined' | 'custom';
+  isEnabled: boolean;
+  displayName?: string;
+  description?: string;
+  parametersSchema?: any;
+}
+
+// Mock data pool for per-demo data
+export interface MockDataPoolLite {
+  poolType: string;
+  poolName: string;
+  records: Array<{ id: string; [key: string]: unknown }>;
+}
+
+// Simplified demo config for telephony - matches relevant fields from frontend DemoConfig
+export interface DemoConfigLite {
+  id?: string;
+  name?: string;
+  slug?: string;
+  businessProfile?: {
+    organizationName?: string;
+    phoneNumber?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+    };
+  };
+  agentConfig?: {
+    agentName?: string;
+    voiceName?: string;
+    systemPrompt?: string;
+  };
+  toolConfigs?: ToolConfigLite[];
+  mockDataPools?: MockDataPoolLite[];
+  ambientAudio?: {
+    enabled: boolean;
+    volume: number;
+    audioFile: string;
+  };
 }
 
 export interface InitiateCallRequest {
   phoneNumber: string;
   provider: VoiceProvider;
+  demoConfig?: DemoConfigLite;
 }
 
 export interface CallResponse {
@@ -72,6 +120,10 @@ export interface ProviderConfig {
   model: string;
   systemInstruction: string;
   voiceName: string;
+  toolConfigs?: ToolConfigLite[];
+  mockDataPools?: MockDataPoolLite[];
+  demoConfigId?: string;
+  demoSlug?: string; // To identify which demo type (dental, nemt, etc.)
 }
 
 export interface VoiceProviderCallbacks {

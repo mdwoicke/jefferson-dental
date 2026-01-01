@@ -210,7 +210,7 @@ export const PatientForm: React.FC = () => {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-slate-600">{loading ? 'Loading patient...' : 'Initializing...'}</p>
+            <p className="text-slate-600 dark:text-slate-400">{loading ? 'Loading patient...' : 'Initializing...'}</p>
           </div>
         </div>
       </div>
@@ -224,17 +224,17 @@ export const PatientForm: React.FC = () => {
         <div className="flex items-center gap-4">
           <Link
             to="/admin/patients"
-            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
           >
-            <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
               {isEditMode ? 'Edit Patient' : 'Add New Patient'}
             </h1>
-            <p className="text-slate-600 mt-1">
+            <p className="text-slate-600 dark:text-slate-400 mt-1">
               {isEditMode ? 'Update patient information' : 'Create a new patient record'}
             </p>
           </div>
@@ -243,21 +243,21 @@ export const PatientForm: React.FC = () => {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Parent Information */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Parent/Guardian Information</h2>
+          <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Parent/Guardian Information</h2>
 
             <div className="space-y-4">
               {/* Parent Name */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                   Parent/Guardian Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.parentName}
                   onChange={(e) => setFormData({ ...formData, parentName: e.target.value })}
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-                    errors.parentName ? 'border-red-500' : 'border-slate-200'
+                  className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 ${
+                    errors.parentName ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
                   }`}
                   placeholder="e.g., Maria Garcia"
                 />
@@ -266,15 +266,15 @@ export const PatientForm: React.FC = () => {
 
               {/* Phone Number */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                   Phone Number <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
                   value={formData.phoneNumber}
                   onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-                    errors.phoneNumber ? 'border-red-500' : 'border-slate-200'
+                  className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 ${
+                    errors.phoneNumber ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
                   }`}
                   placeholder="e.g., (512) 555-0100"
                 />
@@ -283,13 +283,13 @@ export const PatientForm: React.FC = () => {
 
               {/* Preferred Language */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                   Preferred Language
                 </label>
                 <select
                   value={formData.preferredLanguage}
                   onChange={(e) => setFormData({ ...formData, preferredLanguage: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                 >
                   <option value="English">English</option>
                   <option value="Spanish">Spanish</option>
@@ -302,21 +302,21 @@ export const PatientForm: React.FC = () => {
           </div>
 
           {/* Address */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Address</h2>
+          <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Address</h2>
 
             <div className="space-y-4">
               {/* Street */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                   Street Address <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.street}
                   onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                  className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-                    errors.street ? 'border-red-500' : 'border-slate-200'
+                  className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 ${
+                    errors.street ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
                   }`}
                   placeholder="e.g., 456 Oak Street"
                 />
@@ -326,15 +326,15 @@ export const PatientForm: React.FC = () => {
               {/* City, State, ZIP */}
               <div className="grid md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                     City <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-                      errors.city ? 'border-red-500' : 'border-slate-200'
+                    className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 ${
+                      errors.city ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
                     }`}
                     placeholder="e.g., Austin"
                   />
@@ -342,14 +342,14 @@ export const PatientForm: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                     State <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-                      errors.state ? 'border-red-500' : 'border-slate-200'
+                    className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white ${
+                      errors.state ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
                     }`}
                   >
                     <option value="TX">Texas</option>
@@ -361,15 +361,15 @@ export const PatientForm: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                     ZIP Code <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={formData.zip}
                     onChange={(e) => setFormData({ ...formData, zip: e.target.value })}
-                    className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-                      errors.zip ? 'border-red-500' : 'border-slate-200'
+                    className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 ${
+                      errors.zip ? 'border-red-500' : 'border-slate-200 dark:border-slate-600'
                     }`}
                     placeholder="e.g., 78704"
                   />
@@ -380,10 +380,10 @@ export const PatientForm: React.FC = () => {
           </div>
 
           {/* Children */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200">
+          <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Children</h2>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Children</h2>
                 {errors.children && <p className="text-red-500 text-sm mt-1">{errors.children}</p>}
               </div>
               <button
@@ -399,27 +399,27 @@ export const PatientForm: React.FC = () => {
             </div>
 
             {children.length === 0 ? (
-              <div className="text-center py-8 bg-slate-50 rounded-lg border-2 border-dashed border-slate-200">
-                <p className="text-slate-600">No children added yet</p>
-                <p className="text-sm text-slate-500 mt-1">Click "Add Child" to get started</p>
+              <div className="text-center py-8 bg-slate-50 dark:bg-slate-700/30 rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-600">
+                <p className="text-slate-600 dark:text-slate-400">No children added yet</p>
+                <p className="text-sm text-slate-500 dark:text-slate-500 mt-1">Click "Add Child" to get started</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {children.map((child) => (
                   <div
                     key={child.tempId}
-                    className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200"
+                    className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-200 dark:border-slate-600"
                   >
                     <div className="flex-1">
-                      <div className="font-semibold text-slate-900">{child.name}</div>
-                      <div className="text-sm text-slate-600">
+                      <div className="font-semibold text-slate-900 dark:text-white">{child.name}</div>
+                      <div className="text-sm text-slate-600 dark:text-slate-400">
                         Age {child.age} • Medicaid ID: {child.medicaid_id}
                       </div>
                       {child.date_of_birth && (
-                        <div className="text-sm text-slate-500">DOB: {child.date_of_birth}</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-500">DOB: {child.date_of_birth}</div>
                       )}
                       {child.special_needs && (
-                        <div className="text-sm text-purple-700 mt-1">
+                        <div className="text-sm text-purple-700 dark:text-purple-400 mt-1">
                           Special needs: {child.special_needs}
                         </div>
                       )}
@@ -428,7 +428,7 @@ export const PatientForm: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setEditingChild(child.tempId!)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                         title="Edit child"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -443,7 +443,7 @@ export const PatientForm: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => removeChild(child.tempId!)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                         title="Remove child"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -463,32 +463,32 @@ export const PatientForm: React.FC = () => {
           </div>
 
           {/* Additional Information */}
-          <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200">
-            <h2 className="text-xl font-bold text-slate-900 mb-4">Additional Information</h2>
+          <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Additional Information</h2>
 
             <div className="space-y-4">
               {/* Last Visit */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                   Last Visit Date (Optional)
                 </label>
                 <input
                   type="date"
                   value={formData.lastVisit}
                   onChange={(e) => setFormData({ ...formData, lastVisit: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                 />
               </div>
 
               {/* Notes */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                   Notes (Optional)
                 </label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  className="w-full px-4 py-2 border-2 border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400"
                   rows={4}
                   placeholder="Any additional information about this family..."
                 />
@@ -500,7 +500,7 @@ export const PatientForm: React.FC = () => {
           <div className="flex gap-4 justify-end">
             <Link
               to="/admin/patients"
-              className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors"
+              className="px-6 py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-lg font-semibold transition-colors"
             >
               Cancel
             </Link>

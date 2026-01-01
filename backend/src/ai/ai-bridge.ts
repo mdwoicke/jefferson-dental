@@ -2,26 +2,38 @@ import { EventEmitter } from 'events';
 import { MediaStreamHandler } from '../twilio/media-stream-handler';
 import { IVoiceProvider, VoiceProvider } from '../types';
 import { AudioConverter } from './audio-converter';
+import { AmbientAudioMixer } from './ambient-audio-mixer';
+
+interface AmbientAudioConfig {
+  enabled: boolean;
+  volume: number;
+  audioFile: string;
+}
 
 /**
  * Bidirectional audio bridge between Twilio and AI providers
  * Routes audio: Twilio (μ-law 8kHz) ↔ AI (PCM16 24kHz/16kHz)
+ * Optionally mixes ambient background audio with AI output
  */
 export class AudioBridge extends EventEmitter {
   private twilioStream: MediaStreamHandler;
   private aiProvider: IVoiceProvider;
   private providerType: VoiceProvider;
   private isActive = false;
+  private ambientMixer: AmbientAudioMixer | null = null;
+  private ambientConfig: AmbientAudioConfig | undefined;
 
   constructor(
     twilioStream: MediaStreamHandler,
     aiProvider: IVoiceProvider,
-    providerType: VoiceProvider
+    providerType: VoiceProvider,
+    ambientConfig?: AmbientAudioConfig
   ) {
     super();
     this.twilioStream = twilioStream;
     this.aiProvider = aiProvider;
     this.providerType = providerType;
+    this.ambientConfig = ambientConfig;
   }
 
   /**
@@ -30,6 +42,21 @@ export class AudioBridge extends EventEmitter {
   async start(): Promise<void> {
     console.log(`🌉 Starting audio bridge (Twilio ↔ ${this.providerType})`);
     this.isActive = true;
+
+    // Initialize ambient audio mixer if configured
+    if (this.ambientConfig?.enabled) {
+      console.log(`🔊 Initializing ambient audio mixer (volume: ${Math.round(this.ambientConfig.volume * 100)}%)`);
+      this.ambientMixer = new AmbientAudioMixer(this.ambientConfig);
+      const loaded = await this.ambientMixer.load();
+      if (loaded) {
+        // Start continuous ambient audio in background
+        this.ambientMixer.startContinuousAmbient((audio) => {
+          if (this.isActive) {
+            this.twilioStream.sendAudio(audio);
+          }
+        });
+      }
+    }
 
     // Route 1: Twilio → AI (caller speaks)
     this.twilioStream.on('audio', (ulawBase64: string) => {
@@ -100,6 +127,12 @@ export class AudioBridge extends EventEmitter {
 
     console.log('🛑 Stopping audio bridge');
     this.isActive = false;
+
+    // Stop ambient audio mixer
+    if (this.ambientMixer) {
+      this.ambientMixer.stopContinuousAmbient();
+      this.ambientMixer = null;
+    }
 
     // Disconnect AI provider
     try {

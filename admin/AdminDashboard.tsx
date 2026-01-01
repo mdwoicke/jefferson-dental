@@ -44,7 +44,7 @@ const DashboardHome: React.FC = () => {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Initializing database...</p>
+          <p className="text-slate-600 dark:text-slate-400">Initializing database...</p>
         </div>
       </div>
     );
@@ -55,7 +55,7 @@ const DashboardHome: React.FC = () => {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading data...</p>
+          <p className="text-slate-600 dark:text-slate-400">Loading data...</p>
         </div>
       </div>
     );
@@ -66,8 +66,8 @@ const DashboardHome: React.FC = () => {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-slate-600 mt-1">Manage patient data for test calls</p>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+          <p className="text-slate-600 dark:text-slate-400 mt-1">Manage patient data for test calls</p>
         </div>
         <Link
           to="/admin/patients/new"
@@ -82,10 +82,10 @@ const DashboardHome: React.FC = () => {
 
       {/* Stats Cards */}
       <div className="grid md:grid-cols-3 gap-6">
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200">
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -95,16 +95,16 @@ const DashboardHome: React.FC = () => {
               </svg>
             </div>
             <div>
-              <p className="text-sm text-slate-600">Total Patients</p>
-              <p className="text-3xl font-bold text-slate-900">{stats.patients}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Total Patients</p>
+              <p className="text-3xl font-bold text-slate-900 dark:text-white">{stats.patients}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200">
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -114,16 +114,16 @@ const DashboardHome: React.FC = () => {
               </svg>
             </div>
             <div>
-              <p className="text-sm text-slate-600">Total Children</p>
-              <p className="text-3xl font-bold text-slate-900">{stats.children}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Total Children</p>
+              <p className="text-3xl font-bold text-slate-900 dark:text-white">{stats.children}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200">
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+              <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -133,30 +133,30 @@ const DashboardHome: React.FC = () => {
               </svg>
             </div>
             <div>
-              <p className="text-sm text-slate-600">Database</p>
-              <p className="text-xl font-bold text-green-600">Active</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Database</p>
+              <p className="text-xl font-bold text-green-600 dark:text-green-400">Active</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Recent Patients */}
-      <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg border border-slate-200">
-        <div className="p-6 border-b border-slate-200">
+      <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700">
+        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-slate-900">Recent Patients</h2>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Recent Patients</h2>
             <Link
               to="/admin/patients"
-              className="text-sm text-blue-600 hover:text-blue-700 font-semibold"
+              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold"
             >
               View All →
             </Link>
           </div>
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-slate-100 dark:divide-slate-700">
           {recentPatients.length === 0 ? (
             <div className="p-12 text-center">
-              <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
@@ -166,7 +166,7 @@ const DashboardHome: React.FC = () => {
                   />
                 </svg>
               </div>
-              <p className="text-slate-600 mb-4">No patients yet</p>
+              <p className="text-slate-600 dark:text-slate-400 mb-4">No patients yet</p>
               <Link
                 to="/admin/patients/new"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors"
@@ -179,15 +179,15 @@ const DashboardHome: React.FC = () => {
             </div>
           ) : (
             recentPatients.map(patient => (
-              <div key={patient.id} className="p-6 hover:bg-slate-50 transition-colors">
+              <div key={patient.id} className="p-6 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-slate-900">{patient.parentName}</h3>
-                    <p className="text-sm text-slate-600 mt-1">
+                    <h3 className="font-semibold text-slate-900 dark:text-white">{patient.parentName}</h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                       {patient.phoneNumber} • {patient.address.city}, {patient.address.state}
                     </p>
                     <div className="flex items-center gap-2 mt-2">
-                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold rounded-full">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path
                             strokeLinecap="round"
@@ -202,7 +202,7 @@ const DashboardHome: React.FC = () => {
                   </div>
                   <Link
                     to={`/admin/patients/${patient.id}/edit`}
-                    className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg font-semibold transition-colors"
+                    className="px-4 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg font-semibold transition-colors"
                   >
                     Edit
                   </Link>
