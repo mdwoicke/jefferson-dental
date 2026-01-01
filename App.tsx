@@ -7,11 +7,13 @@ import { TelephonyMode } from './components/TelephonyMode';
 import { PatientSelector } from './components/PatientSelector';
 import { TranscriptPanel } from './components/TranscriptPanel';
 import { AppointmentSummaryCard } from './components/AppointmentSummaryCard';
+import { RideSummaryCard } from './components/RideSummaryCard';
 import { ThemeToggle } from './components/ThemeToggle';
 import IPhoneCallScreen from './components/IPhoneCallScreen';
 import { DemoConfigSelector } from './components/DemoConfigSelector';
 import { DemoWizard } from './wizard';
 import { extractSuccessfulBookings, extractSMSConfirmationRequest } from './utils/appointment-utils';
+import { extractSuccessfulRides } from './utils/ride-utils';
 import { VoiceProvider } from './types';
 import { useDatabase } from './contexts/DatabaseContext';
 import { useActiveDemoConfig } from './contexts/DemoConfigContext';
@@ -140,7 +142,10 @@ const App: React.FC<AppProps> = ({ onNavigateToHistory }) => {
     setSelectedDeviceId,
     enumerateAudioDevices,
     // Secure context check
-    isSecureContext
+    isSecureContext,
+    // Ambient audio volume control
+    ambientVolume,
+    setAmbientVolume
   } = useLiveSession(provider, selectedPatientId, dbAdapter, setToolSystemMode, activeConfig);
 
   // Sync hook's toolSystemMode to local state
@@ -159,11 +164,20 @@ const App: React.FC<AppProps> = ({ onNavigateToHistory }) => {
   // Extract successful appointment bookings from transcripts
   const successfulBookings = extractSuccessfulBookings(transcriptItems);
 
+  // Extract successful ride bookings from transcripts
+  const successfulRides = extractSuccessfulRides(transcriptItems);
+
   // Debug: Log successful bookings
   React.useEffect(() => {
     console.log('📋 APP.TSX - successfulBookings:', successfulBookings.length, 'bookings');
     console.log('📋 APP.TSX - bookings data:', successfulBookings);
   }, [successfulBookings]);
+
+  // Debug: Log successful rides
+  React.useEffect(() => {
+    console.log('🚗 APP.TSX - successfulRides:', successfulRides.length, 'rides');
+    console.log('🚗 APP.TSX - rides data:', successfulRides);
+  }, [successfulRides]);
 
   // Format SMS message from booking using dynamic config
   const formatSMSMessage = (booking: any): string => {
@@ -580,12 +594,18 @@ Booking ID: ${booking.booking_id}`;
                   </div>
                 )}
 
-                {/* Column 3: Appointment Summary (Fixed Width, Appears When Bookings Exist) */}
-                <div className="w-[450px] pt-16">
+                {/* Column 3: Booking Summaries (Fixed Width, Appears When Bookings/Rides Exist) */}
+                <div className="w-[450px] pt-16 space-y-6">
                   {successfulBookings.length > 0 && (
                     <AppointmentSummaryCard
                       bookings={successfulBookings}
                       parentName={patient?.parentName}
+                    />
+                  )}
+                  {successfulRides.length > 0 && (
+                    <RideSummaryCard
+                      rides={successfulRides}
+                      memberName={patient?.parentName}
                     />
                   )}
                 </div>

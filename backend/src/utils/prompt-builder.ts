@@ -1,12 +1,111 @@
 /**
  * PromptBuilder Utility
  * Dynamically generates personalized AI prompts by injecting patient data from the database
+ * Supports custom system prompts from demo configurations
  */
 
 import type { PatientRecord } from '../database/db-interface';
 import { config } from '../config';
 
+// Simplified DemoConfig interface for backend use
+// Matches the relevant fields from the frontend DemoConfig type
+interface DemoConfigLite {
+  name?: string;
+  businessProfile?: {
+    organizationName?: string;
+    phoneNumber?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+    };
+  };
+  agentConfig?: {
+    agentName?: string;
+    voiceName?: string;
+    systemPrompt?: string;
+  };
+}
+
 export class PromptBuilder {
+  /**
+   * Interpolate variables in a custom system prompt with patient and demo config data
+   */
+  private static interpolatePromptVariables(
+    prompt: string,
+    patient: PatientRecord | null,
+    demoConfig?: DemoConfigLite
+  ): string {
+    const orgName = demoConfig?.businessProfile?.organizationName || '';
+    const agentName = demoConfig?.agentConfig?.agentName || '';
+    const voiceName = demoConfig?.agentConfig?.voiceName || '';
+    const clinicPhone = demoConfig?.businessProfile?.phoneNumber || '';
+    const fullAddress = demoConfig?.businessProfile?.address
+      ? `${demoConfig.businessProfile.address.street}, ${demoConfig.businessProfile.address.city}, ${demoConfig.businessProfile.address.state} ${demoConfig.businessProfile.address.zip}`
+      : '';
+
+    // Build context object for variable replacement
+    const context: Record<string, string> = {
+      // Demo config variables
+      organizationName: orgName,
+      agentName,
+      voiceName,
+      clinicPhone,
+      clinicAddress: fullAddress,
+      businessName: orgName,
+    };
+
+    // Add patient variables if available
+    if (patient) {
+      const childrenNames = patient.children.map(c => c.name).join(' and ');
+      const childrenList = patient.children
+        .map(c => `${c.name} (age ${c.age}${c.medicaid_id ? `, ID: ${c.medicaid_id}` : ''})`)
+        .join(', ');
+
+      Object.assign(context, {
+        parentName: patient.parentName,
+        phoneNumber: patient.phoneNumber,
+        childrenNames,
+        childrenList,
+        childCount: String(patient.children.length),
+        address: `${patient.address.street}, ${patient.address.city}, ${patient.address.state} ${patient.address.zip}`,
+        street: patient.address.street,
+        city: patient.address.city,
+        state: patient.address.state,
+        zip: patient.address.zip,
+        preferredLanguage: patient.preferredLanguage || 'English',
+        lastVisit: patient.lastVisit || 'Never',
+        notes: patient.notes || '',
+      });
+    } else {
+      // Provide placeholder text for patient variables when no patient data available
+      Object.assign(context, {
+        parentName: '[Caller]',
+        phoneNumber: '[Unknown]',
+        childrenNames: '[Unknown]',
+        childrenList: '[Unknown]',
+        childCount: '0',
+        address: '[Unknown]',
+        street: '',
+        city: '',
+        state: '',
+        zip: '',
+        preferredLanguage: 'English',
+        lastVisit: 'Never',
+        notes: '',
+      });
+    }
+
+    // Replace {{variable}} patterns in the prompt
+    let interpolatedPrompt = prompt;
+    for (const [key, value] of Object.entries(context)) {
+      const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+      interpolatedPrompt = interpolatedPrompt.replace(pattern, value);
+    }
+
+    return interpolatedPrompt;
+  }
   /**
    * Build SMS instructions based on configured mode
    */
@@ -59,8 +158,24 @@ export class PromptBuilder {
 
   /**
    * Build a personalized outbound call prompt with patient context
+   * Uses demo config's custom systemPrompt if provided, otherwise falls back to dental template
    */
-  static buildOutboundCallPrompt(patient: PatientRecord): string {
+  static buildOutboundCallPrompt(patient: PatientRecord, demoConfig?: DemoConfigLite): string {
+    // If demo config has a custom system prompt, use it directly with variable interpolation
+    if (demoConfig?.agentConfig?.systemPrompt && demoConfig.agentConfig.systemPrompt.trim().length > 0) {
+      console.log(`📝 PromptBuilder (backend): Using CUSTOM systemPrompt from demo config "${demoConfig.name}" (${demoConfig.agentConfig.systemPrompt.length} chars)`);
+      return this.interpolatePromptVariables(demoConfig.agentConfig.systemPrompt, patient, demoConfig);
+    }
+
+    // Fallback to default dental clinic prompt template
+    console.log(`📝 PromptBuilder (backend): No custom systemPrompt found, using DEFAULT dental template`);
+    return this.buildDentalOutboundPrompt(patient, demoConfig);
+  }
+
+  /**
+   * Build the default dental clinic outbound prompt template
+   */
+  private static buildDentalOutboundPrompt(patient: PatientRecord, demoConfig?: DemoConfigLite): string {
     const childrenNames = patient.children.map(c => c.name).join(' and ');
     const childrenList = patient.children
       .map(
@@ -77,9 +192,13 @@ export class PromptBuilder {
 
     const notesText = patient.notes ? `\n- Additional Notes: ${patient.notes}` : '';
 
+    // Use demo config values if provided, otherwise use defaults
+    const orgName = demoConfig?.businessProfile?.organizationName || 'Jefferson Dental Clinics';
+    const agentName = demoConfig?.agentConfig?.agentName || 'Sophia';
+
     return `
 SYSTEM INSTRUCTION:
-You are Sophia, an AI outreach agent for Jefferson Dental Clinics. You have a warm, friendly, and professional voice. Your role is to help parents schedule dental appointments for their children who have been assigned to our clinic through the Texas Medicaid program (CHIP/STAR Kids).
+You are ${agentName}, an AI outreach agent for ${orgName}. You have a warm, friendly, and professional voice. Your role is to help parents schedule dental appointments for their children who have been assigned to our clinic through the Texas Medicaid program (CHIP/STAR Kids).
 
 🚨 CRITICAL RULE - SMS CONSENT PROTOCOL (HIGHEST PRIORITY):
 - NEVER send SMS without explicit verbal permission from the parent
@@ -171,18 +290,33 @@ Remember: You are warm, patient, and helpful. Your goal is to make the parent fe
 
   /**
    * Build a prompt for inbound calls (when a patient calls the clinic)
+   * Uses demo config's custom systemPrompt if provided, otherwise falls back to dental template
    */
-  static buildInboundCallPrompt(patient: PatientRecord | null): string {
+  static buildInboundCallPrompt(patient: PatientRecord | null, demoConfig?: DemoConfigLite): string {
+    // If demo config has a custom system prompt, use it directly with variable interpolation
+    if (demoConfig?.agentConfig?.systemPrompt && demoConfig.agentConfig.systemPrompt.trim().length > 0) {
+      console.log(`📝 PromptBuilder (backend/inbound): Using CUSTOM systemPrompt from demo config "${demoConfig.name}"`);
+      return this.interpolatePromptVariables(demoConfig.agentConfig.systemPrompt, patient, demoConfig);
+    }
+
+    // Use demo config values if provided, otherwise use defaults
+    const orgName = demoConfig?.businessProfile?.organizationName || 'Jefferson Dental Clinics';
+    const agentName = demoConfig?.agentConfig?.agentName || 'Sophia';
+    const clinicAddress = demoConfig?.businessProfile?.address
+      ? `${demoConfig.businessProfile.address.street}, ${demoConfig.businessProfile.address.city}, ${demoConfig.businessProfile.address.state} ${demoConfig.businessProfile.address.zip}`
+      : '123 Main Street, Austin, TX 78701';
+    const clinicPhone = demoConfig?.businessProfile?.phoneNumber || '512-555-0100';
+
     if (!patient) {
       // Unknown caller - gather information first
       return `
 SYSTEM INSTRUCTION:
-You are Sophia, a receptionist at Jefferson Dental Clinics. You have a warm, friendly, and professional voice.
+You are ${agentName}, a receptionist at ${orgName}. You have a warm, friendly, and professional voice.
 
 A caller has reached our office, but we don't have their information in our system yet.
 
 **Your Role:**
-1. Greet them professionally: "Thank you for calling Jefferson Dental Clinics, this is Sophia. How can I help you today?"
+1. Greet them professionally: "Thank you for calling ${orgName}, this is ${agentName}. How can I help you today?"
 2. Determine why they're calling (new appointment, existing appointment question, general inquiry)
 3. If they want to schedule, gather their phone number and basic information
 4. Ask basic questions: parent name, children's names, ages, Medicaid coverage status
@@ -190,8 +324,8 @@ A caller has reached our office, but we don't have their information in our syst
 6. Verbally confirm appointment details and ASK if they'd like a text confirmation (only send if they say yes)
 
 **Key Information:**
-- Clinic Address: 123 Main Street, Austin, TX 78701
-- Phone: 512-555-0100
+- Clinic Address: ${clinicAddress}
+- Phone: ${clinicPhone}
 - Hours: Monday-Friday 8 AM - 5 PM
 - We accept Texas Medicaid (CHIP/STAR Kids)
 - All appointments for Medicaid patients are fully covered - no cost
@@ -210,7 +344,7 @@ Be helpful, patient, and professional!
 
     return `
 SYSTEM INSTRUCTION:
-You are Sophia, a receptionist at Jefferson Dental Clinics. You have a warm, friendly, and professional voice.
+You are ${agentName}, a receptionist at ${orgName}. You have a warm, friendly, and professional voice.
 
 **Caller Information:**
 ${patient.parentName} is calling from ${patient.phoneNumber}.
@@ -224,7 +358,7 @@ ${patient.parentName} is calling from ${patient.phoneNumber}.
 ${patient.notes ? `- Notes: ${patient.notes}` : ''}
 
 **Greeting:**
-"Good ${timeOfDay}, ${patient.parentName}! This is Sophia from Jefferson Dental Clinics. I see we have ${childrenNames} in our system. How can I help you today?"
+"Good ${timeOfDay}, ${patient.parentName}! This is ${agentName} from ${orgName}. I see we have ${childrenNames} in our system. How can I help you today?"
 
 **Your Role:**
 1. Greet them by name (you recognize their phone number)
@@ -240,7 +374,7 @@ ${patient.notes ? `- Notes: ${patient.notes}` : ''}
 - **Scheduling**: Ask about their availability and offer specific appointment times for ${childrenNames} (e.g., "I have Thursday at 2 PM available" or "How about next Monday at 10 AM?")
 - **Rescheduling**: Help them find a new time that works better for their schedule
 - **Medicaid Coverage**: Confirm all appointments are fully covered - no cost
-- **Directions**: 123 Main Street, Austin, TX 78701
+- **Directions**: ${clinicAddress}
 - **What to Bring**: Medicaid card for each child, photo ID for parent
 
 **Appointment Scheduling:**
@@ -252,7 +386,7 @@ ${this.buildSMSInstructions(config.sms.mode)}
 
 **Key Information:**
 - Clinic Hours: Monday-Friday 8 AM - 5 PM
-- Phone: 512-555-0100
+- Phone: ${clinicPhone}
 - All Medicaid appointments are fully covered
 - Each child appointment is 45 minutes
 
@@ -262,19 +396,34 @@ Be helpful and professional. You already know who they are, so make them feel re
 
   /**
    * Build a fallback prompt when no patient data is available
+   * Uses demo config's custom systemPrompt if available, otherwise falls back to defaults
    */
-  static buildFallbackPrompt(): string {
+  static buildFallbackPrompt(demoConfig?: DemoConfigLite): string {
+    // If demo config has a custom system prompt, use it directly
+    if (demoConfig?.agentConfig?.systemPrompt && demoConfig.agentConfig.systemPrompt.trim().length > 0) {
+      console.log(`📝 PromptBuilder (backend/fallback): Using CUSTOM systemPrompt from demo config "${demoConfig.name}"`);
+      return this.interpolatePromptVariables(demoConfig.agentConfig.systemPrompt, null, demoConfig);
+    }
+
+    // Use demo config values if provided, otherwise use defaults
+    const orgName = demoConfig?.businessProfile?.organizationName || 'Jefferson Dental Clinics';
+    const agentName = demoConfig?.agentConfig?.agentName || 'Sophia';
+    const clinicAddress = demoConfig?.businessProfile?.address
+      ? `${demoConfig.businessProfile.address.street}, ${demoConfig.businessProfile.address.city}, ${demoConfig.businessProfile.address.state} ${demoConfig.businessProfile.address.zip}`
+      : '123 Main Street, Austin, TX 78701';
+    const clinicPhone = demoConfig?.businessProfile?.phoneNumber || '512-555-0100';
+
     return `
 SYSTEM INSTRUCTION:
-You are Sophia, a receptionist at Jefferson Dental Clinics. You have a warm, friendly, and professional voice.
+You are ${agentName}, a receptionist at ${orgName}. You have a warm, friendly, and professional voice.
 
 **Your Role:**
-You are assisting with phone calls at our dental clinic. Be warm, professional, and helpful.
+You are assisting with phone calls at our clinic. Be warm, professional, and helpful.
 
 **Key Information:**
-- Clinic Name: Jefferson Dental Clinics
-- Address: 123 Main Street, Austin, TX 78701
-- Phone: 512-555-0100
+- Organization: ${orgName}
+- Address: ${clinicAddress}
+- Phone: ${clinicPhone}
 - Hours: Monday-Friday 8 AM - 5 PM
 - We accept Texas Medicaid (CHIP/STAR Kids)
 - All Medicaid appointments are fully covered
@@ -287,7 +436,7 @@ You are assisting with phone calls at our dental clinic. Be warm, professional, 
 ${this.buildSMSInstructions(config.sms.mode)}
 
 **Greeting:**
-"Thank you for calling Jefferson Dental Clinics, this is Sophia. How can I help you today?"
+"Thank you for calling ${orgName}, this is ${agentName}. How can I help you today?"
 
 Be helpful, patient, and professional!
 `;
@@ -363,15 +512,21 @@ Be helpful, patient, and professional!
 
   /**
    * Build a prompt for backend telephony mode
+   * Accepts optional demo config for custom system prompts
    */
-  static buildTelephonyPrompt(patient: PatientRecord | null, direction: 'inbound' | 'outbound'): string {
+  static buildTelephonyPrompt(
+    patient: PatientRecord | null,
+    direction: 'inbound' | 'outbound',
+    demoConfig?: DemoConfigLite
+  ): string {
     if (direction === 'outbound') {
       if (!patient) {
-        throw new Error('Patient data required for outbound calls');
+        // For outbound without patient, use fallback
+        return this.buildFallbackPrompt(demoConfig);
       }
-      return this.buildOutboundCallPrompt(patient);
+      return this.buildOutboundCallPrompt(patient, demoConfig);
     } else {
-      return this.buildInboundCallPrompt(patient);
+      return this.buildInboundCallPrompt(patient, demoConfig);
     }
   }
 

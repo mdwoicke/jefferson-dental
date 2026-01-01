@@ -11,9 +11,86 @@ import { DENTAL_IVA_PROMPT } from '../constants';
 export class PromptBuilder {
   /**
    * Build a personalized outbound call prompt with patient context and demo config
-   * Uses demo config values (organization name, agent name, etc.) when provided
+   * Uses demo config's custom systemPrompt if provided, otherwise falls back to dental template
    */
   static buildOutboundCallPrompt(patient: PatientRecord, demoConfig?: DemoConfig): string {
+    // If demo config has a custom system prompt, use it directly with variable interpolation
+    if (demoConfig?.agentConfig?.systemPrompt && demoConfig.agentConfig.systemPrompt.trim().length > 0) {
+      console.log(`📝 PromptBuilder: Using CUSTOM systemPrompt from demo config "${demoConfig.name}" (${demoConfig.agentConfig.systemPrompt.length} chars)`);
+      return this.interpolatePromptVariables(demoConfig.agentConfig.systemPrompt, patient, demoConfig);
+    }
+
+    // Fallback to default dental clinic prompt template
+    console.log(`📝 PromptBuilder: No custom systemPrompt found, using DEFAULT dental template`);
+    return this.buildDentalOutboundPrompt(patient, demoConfig);
+  }
+
+  /**
+   * Interpolate variables in a custom system prompt with patient and demo config data
+   */
+  private static interpolatePromptVariables(
+    prompt: string,
+    patient: PatientRecord,
+    demoConfig?: DemoConfig
+  ): string {
+    const childrenNames = patient.children.map(c => c.name).join(' and ');
+    const childrenList = patient.children
+      .map(
+        c =>
+          `${c.name} (age ${c.age}${c.medicaid_id ? `, ID: ${c.medicaid_id}` : ''}${
+            c.date_of_birth ? `, DOB: ${c.date_of_birth}` : ''
+          }${c.special_needs ? `, Special needs: ${c.special_needs}` : ''})`
+      )
+      .join(', ');
+
+    const orgName = demoConfig?.businessProfile?.organizationName || '';
+    const agentName = demoConfig?.agentConfig?.agentName || '';
+    const voiceName = demoConfig?.agentConfig?.voiceName || '';
+    const clinicPhone = demoConfig?.businessProfile?.phoneNumber || '';
+    const fullAddress = demoConfig?.businessProfile?.address
+      ? `${demoConfig.businessProfile.address.street}, ${demoConfig.businessProfile.address.city}, ${demoConfig.businessProfile.address.state} ${demoConfig.businessProfile.address.zip}`
+      : '';
+
+    // Create a context object for variable replacement
+    const context: Record<string, string> = {
+      // Patient variables
+      parentName: patient.parentName,
+      phoneNumber: patient.phoneNumber,
+      childrenNames,
+      childrenList,
+      childCount: String(patient.children.length),
+      address: `${patient.address.street}, ${patient.address.city}, ${patient.address.state} ${patient.address.zip}`,
+      street: patient.address.street,
+      city: patient.address.city,
+      state: patient.address.state,
+      zip: patient.address.zip,
+      preferredLanguage: patient.preferredLanguage || 'English',
+      lastVisit: patient.lastVisit || 'Never',
+      notes: patient.notes || '',
+
+      // Demo config variables
+      organizationName: orgName,
+      agentName,
+      voiceName,
+      clinicPhone,
+      clinicAddress: fullAddress,
+      businessName: orgName,
+    };
+
+    // Replace {{variable}} patterns in the prompt
+    let interpolatedPrompt = prompt;
+    for (const [key, value] of Object.entries(context)) {
+      const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+      interpolatedPrompt = interpolatedPrompt.replace(pattern, value);
+    }
+
+    return interpolatedPrompt;
+  }
+
+  /**
+   * Build the default dental clinic outbound prompt template
+   */
+  private static buildDentalOutboundPrompt(patient: PatientRecord, demoConfig?: DemoConfig): string {
     const childrenNames = patient.children.map(c => c.name).join(' and ');
     const childrenList = patient.children
       .map(
@@ -237,11 +314,56 @@ Be helpful and professional. You already know who they are, so make them feel re
 
   /**
    * Build a fallback prompt when no patient data is available
-   * Uses demo config values if provided, otherwise falls back to defaults
+   * Uses demo config's custom systemPrompt if available, otherwise falls back to defaults
    */
   static buildFallbackPrompt(demoConfig?: DemoConfig): string {
-    // If we have a demo config, build a dynamic fallback prompt
+    // If demo config has a custom system prompt, use it directly (without patient interpolation)
+    if (demoConfig?.agentConfig?.systemPrompt && demoConfig.agentConfig.systemPrompt.trim().length > 0) {
+      console.log(`📝 PromptBuilder (fallback): Using CUSTOM systemPrompt from demo config "${demoConfig.name}" (${demoConfig.agentConfig.systemPrompt.length} chars)`);
+      // For fallback, we don't have patient data, so just do basic config interpolation
+      const orgName = demoConfig.businessProfile?.organizationName || '';
+      const agentName = demoConfig.agentConfig?.agentName || '';
+      const voiceName = demoConfig.agentConfig?.voiceName || '';
+      const clinicPhone = demoConfig.businessProfile?.phoneNumber || '';
+      const fullAddress = demoConfig.businessProfile?.address
+        ? `${demoConfig.businessProfile.address.street}, ${demoConfig.businessProfile.address.city}, ${demoConfig.businessProfile.address.state} ${demoConfig.businessProfile.address.zip}`
+        : '';
+
+      const context: Record<string, string> = {
+        organizationName: orgName,
+        agentName,
+        voiceName,
+        clinicPhone,
+        clinicAddress: fullAddress,
+        businessName: orgName,
+        // Provide placeholder text for patient variables when no patient data available
+        parentName: '[Caller]',
+        phoneNumber: '[Unknown]',
+        childrenNames: '[Unknown]',
+        childrenList: '[Unknown]',
+        childCount: '0',
+        address: '[Unknown]',
+        street: '',
+        city: '',
+        state: '',
+        zip: '',
+        preferredLanguage: 'English',
+        lastVisit: 'Never',
+        notes: '',
+      };
+
+      let interpolatedPrompt = demoConfig.agentConfig.systemPrompt;
+      for (const [key, value] of Object.entries(context)) {
+        const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+        interpolatedPrompt = interpolatedPrompt.replace(pattern, value);
+      }
+
+      return interpolatedPrompt;
+    }
+
+    // If we have a demo config but no custom system prompt, build a dynamic fallback prompt
     if (demoConfig) {
+      console.log(`📝 PromptBuilder (fallback): Demo config "${demoConfig.name}" has no custom systemPrompt, using DEFAULT dental template`);
       const orgName = demoConfig.businessProfile?.organizationName || 'Jefferson Dental Clinics';
       const agentName = demoConfig.agentConfig?.agentName || 'Sophia';
       const voiceName = demoConfig.agentConfig?.voiceName || 'Zephyr';
@@ -288,6 +410,7 @@ Remember: You are warm, patient, and helpful. Your goal is to make the parent fe
     }
 
     // No demo config provided, use the original static prompt
+    console.log(`📝 PromptBuilder (fallback): No demo config provided, using STATIC DENTAL_IVA_PROMPT from constants.ts`);
     return DENTAL_IVA_PROMPT;
   }
 

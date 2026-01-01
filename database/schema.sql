@@ -532,3 +532,35 @@ END;
 -- Insert schema version for demo wizard
 INSERT OR IGNORE INTO schema_version (version, description) VALUES
 (4, 'Added demo configuration tables for Demo Wizard feature - demo_configs, demo_business_profiles, demo_agent_configs, demo_scenarios, demo_tool_configs, demo_sms_templates, demo_ui_labels');
+
+-- ============================================================================
+-- DEMO MOCK DATA POOLS TABLE (v5)
+-- Stores configurable mock data per demo for tool responses
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS demo_mock_data_pools (
+  id TEXT PRIMARY KEY,
+  demo_config_id TEXT NOT NULL,
+  pool_type TEXT NOT NULL,  -- 'members', 'facilities', 'patients', 'children', 'rides', 'appointments', etc.
+  pool_name TEXT NOT NULL,  -- Human-readable display name
+  records_json TEXT NOT NULL,  -- JSON array of mock data records
+  schema_json TEXT,  -- Optional JSON Schema for validation
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (demo_config_id) REFERENCES demo_configs(id) ON DELETE CASCADE,
+  UNIQUE(demo_config_id, pool_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_demo_mock_pools_demo ON demo_mock_data_pools(demo_config_id);
+CREATE INDEX IF NOT EXISTS idx_demo_mock_pools_type ON demo_mock_data_pools(pool_type);
+
+-- Trigger to update demo_mock_data_pools.updated_at
+CREATE TRIGGER IF NOT EXISTS update_demo_mock_data_pools_timestamp
+AFTER UPDATE ON demo_mock_data_pools
+FOR EACH ROW
+BEGIN
+  UPDATE demo_mock_data_pools SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
+
+-- Insert schema version for mock data pools
+INSERT OR IGNORE INTO schema_version (version, description) VALUES
+(5, 'Added demo_mock_data_pools table for configurable per-demo mock data that tools use at runtime');

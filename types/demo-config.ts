@@ -27,6 +27,8 @@ export interface DemoConfig {
   toolConfigs: ToolConfig[];
   smsTemplates: SMSTemplate[];
   uiLabels: UILabels;
+  mockDataPools: MockDataPool[];
+  ambientAudio?: AmbientAudioConfig;
 }
 
 // ============================================================================
@@ -141,6 +143,248 @@ export interface EdgeCase {
 }
 
 // ============================================================================
+// MOCK DATA POOLS
+// ============================================================================
+
+export type MockDataPoolType =
+  // Dental pools
+  | 'patients'
+  | 'children'
+  | 'appointments'
+  | 'available_slots'
+  // NEMT pools
+  | 'members'
+  | 'facilities'
+  | 'rides'
+  | 'drivers'
+  | 'addresses';
+
+export interface MockDataPool {
+  id: string;
+  demoConfigId: string;
+  poolType: MockDataPoolType;
+  poolName: string;
+  records: MockDataRecord[];
+  schema?: MockDataSchema;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MockDataRecord {
+  id: string;
+  [key: string]: unknown;
+}
+
+export interface MockDataSchema {
+  type: 'object';
+  properties: Record<string, MockDataFieldSchema>;
+  required?: string[];
+}
+
+export interface MockDataFieldSchema {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  description?: string;
+  enum?: string[];
+  default?: unknown;
+}
+
+export interface MockDataPoolRow {
+  id: string;
+  demo_config_id: string;
+  pool_type: string;
+  pool_name: string;
+  records_json: string;
+  schema_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Predefined schemas for known mock data pool types.
+ * These define the expected structure of records in each pool.
+ */
+export const MOCK_DATA_POOL_SCHEMAS: Record<MockDataPoolType, MockDataSchema> = {
+  // =========================================================================
+  // NEMT Schemas
+  // =========================================================================
+  members: {
+    type: 'object',
+    properties: {
+      memberId: { type: 'string', description: 'Member ID (e.g., M987654321)' },
+      firstName: { type: 'string', description: 'First name' },
+      lastName: { type: 'string', description: 'Last name' },
+      dateOfBirth: { type: 'string', description: 'Date of birth (YYYY-MM-DD)' },
+      phone: { type: 'string', description: 'Phone number' },
+      addressStreet: { type: 'string', description: 'Street address' },
+      addressApartment: { type: 'string', description: 'Apartment/Unit' },
+      addressCity: { type: 'string', description: 'City' },
+      addressState: { type: 'string', description: 'State' },
+      addressZip: { type: 'string', description: 'ZIP code' },
+      planType: { type: 'string', enum: ['Medicaid', 'Medicare', 'Dual'], description: 'Insurance plan type' },
+      eligibilityStatus: { type: 'string', enum: ['active', 'inactive', 'pending'], description: 'Eligibility status' },
+      assistanceType: { type: 'string', enum: ['ambulatory', 'wheelchair', 'stretcher', 'wheelchair_xl'], description: 'Mobility assistance type' },
+      totalRidesAllowed: { type: 'number', description: 'Monthly ride limit' },
+      ridesUsed: { type: 'number', description: 'Rides used this period' },
+      benefitResetDate: { type: 'string', description: 'Date when rides reset (YYYY-MM-DD)' },
+      notes: { type: 'string', description: 'Member notes' }
+    },
+    required: ['memberId', 'firstName', 'lastName', 'dateOfBirth', 'phone']
+  },
+  facilities: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Facility name' },
+      address: { type: 'string', description: 'Full street address' },
+      city: { type: 'string', description: 'City' },
+      state: { type: 'string', description: 'State' },
+      zip: { type: 'string', description: 'ZIP code' },
+      facilityType: { type: 'string', enum: ['hospital', 'clinic', 'dialysis', 'pharmacy', 'imaging', 'other'], description: 'Type of facility' },
+      phone: { type: 'string', description: 'Facility phone number' }
+    },
+    required: ['name', 'address']
+  },
+  rides: {
+    type: 'object',
+    properties: {
+      confirmationNumber: { type: 'string', description: 'Confirmation number (e.g., CC-847291)' },
+      memberId: { type: 'string', description: 'Member ID' },
+      status: { type: 'string', enum: ['confirmed', 'pending', 'completed', 'cancelled', 'in_progress'], description: 'Ride status' },
+      tripType: { type: 'string', enum: ['one_way', 'round_trip'], description: 'Trip type' },
+      pickupDate: { type: 'string', description: 'Pickup date (YYYY-MM-DD)' },
+      pickupTime: { type: 'string', description: 'Pickup time (HH:MM)' },
+      pickupAddress: { type: 'string', description: 'Full pickup address' },
+      dropoffAddress: { type: 'string', description: 'Full dropoff address' },
+      facilityName: { type: 'string', description: 'Destination facility name' },
+      appointmentTime: { type: 'string', description: 'Appointment time (HH:MM)' },
+      assistanceType: { type: 'string', enum: ['ambulatory', 'wheelchair', 'stretcher', 'wheelchair_xl'], description: 'Assistance type' },
+      returnTripType: { type: 'string', enum: ['scheduled', 'will_call'], description: 'Return trip type' },
+      returnPickupTime: { type: 'string', description: 'Return pickup time (HH:MM)' },
+      driverName: { type: 'string', description: 'Assigned driver name' },
+      vehicleInfo: { type: 'string', description: 'Vehicle description' },
+      eta: { type: 'number', description: 'ETA in minutes' }
+    },
+    required: ['confirmationNumber', 'memberId', 'status']
+  },
+  drivers: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Driver name (e.g., Marcus W.)' },
+      vehicle: { type: 'string', description: 'Vehicle description with plate' },
+      phone: { type: 'string', description: 'Driver phone number' },
+      vehicleType: { type: 'string', enum: ['sedan', 'suv', 'wheelchair_van', 'stretcher_van'], description: 'Vehicle type' }
+    },
+    required: ['name', 'vehicle']
+  },
+  addresses: {
+    type: 'object',
+    properties: {
+      street: { type: 'string', description: 'Street address' },
+      city: { type: 'string', description: 'City' },
+      state: { type: 'string', description: 'State' },
+      zip: { type: 'string', description: 'ZIP code' },
+      type: { type: 'string', enum: ['residential', 'medical', 'commercial'], description: 'Address type' }
+    },
+    required: ['street']
+  },
+
+  // =========================================================================
+  // Dental Schemas
+  // =========================================================================
+  patients: {
+    type: 'object',
+    properties: {
+      patientId: { type: 'string', description: 'Patient ID' },
+      parentName: { type: 'string', description: 'Parent/guardian name' },
+      phone: { type: 'string', description: 'Phone number' },
+      addressStreet: { type: 'string', description: 'Street address' },
+      addressCity: { type: 'string', description: 'City' },
+      addressState: { type: 'string', description: 'State' },
+      addressZip: { type: 'string', description: 'ZIP code' },
+      preferredLanguage: { type: 'string', description: 'Preferred language', default: 'English' },
+      notes: { type: 'string', description: 'Patient notes' }
+    },
+    required: ['patientId', 'parentName', 'phone']
+  },
+  children: {
+    type: 'object',
+    properties: {
+      patientId: { type: 'string', description: 'Parent patient ID' },
+      name: { type: 'string', description: 'Child name' },
+      age: { type: 'number', description: 'Age' },
+      medicaidId: { type: 'string', description: 'Medicaid ID' },
+      dateOfBirth: { type: 'string', description: 'Date of birth (YYYY-MM-DD)' },
+      specialNeeds: { type: 'string', description: 'Special needs notes' }
+    },
+    required: ['name', 'age']
+  },
+  appointments: {
+    type: 'object',
+    properties: {
+      bookingId: { type: 'string', description: 'Booking ID' },
+      patientId: { type: 'string', description: 'Patient ID' },
+      appointmentTime: { type: 'string', description: 'ISO datetime' },
+      appointmentType: { type: 'string', enum: ['exam', 'cleaning', 'exam_and_cleaning', 'emergency'], description: 'Appointment type' },
+      status: { type: 'string', enum: ['pending', 'confirmed', 'completed', 'cancelled'], description: 'Appointment status' },
+      location: { type: 'string', description: 'Clinic location' },
+      childNames: { type: 'array', description: 'Names of children for this appointment' }
+    },
+    required: ['bookingId', 'appointmentTime', 'appointmentType']
+  },
+  available_slots: {
+    type: 'object',
+    properties: {
+      date: { type: 'string', description: 'Date (YYYY-MM-DD)' },
+      time: { type: 'string', description: 'Time (HH:MM)' },
+      datetime: { type: 'string', description: 'ISO datetime' },
+      availableChairs: { type: 'number', description: 'Number of available chairs' },
+      timeRange: { type: 'string', enum: ['morning', 'afternoon', 'evening'], description: 'Time range' },
+      canAccommodate: { type: 'boolean', description: 'Can accommodate multiple children' }
+    },
+    required: ['date', 'time']
+  }
+};
+
+/**
+ * Get default pool name for a given pool type
+ */
+export function getDefaultPoolName(poolType: MockDataPoolType): string {
+  const names: Record<MockDataPoolType, string> = {
+    members: 'NEMT Members',
+    facilities: 'Medical Facilities',
+    rides: 'Ride Bookings',
+    drivers: 'Drivers',
+    addresses: 'Address Book',
+    patients: 'Patients',
+    children: 'Children',
+    appointments: 'Appointments',
+    available_slots: 'Available Slots'
+  };
+  return names[poolType];
+}
+
+/**
+ * Get pool types relevant to a demo based on its tool configurations
+ */
+export function getRelevantPoolTypes(toolConfigs: ToolConfig[]): MockDataPoolType[] {
+  const toolNames = toolConfigs.map(t => t.toolName);
+  const poolTypes: MockDataPoolType[] = [];
+
+  // NEMT tools -> NEMT pools
+  const nemtTools = ['verify_member', 'get_member_info', 'check_ride_eligibility', 'book_ride', 'get_ride_status', 'cancel_ride', 'update_ride', 'add_companion', 'check_nemt_availability', 'search_address'];
+  if (nemtTools.some(t => toolNames.includes(t))) {
+    poolTypes.push('members', 'facilities', 'rides', 'drivers', 'addresses');
+  }
+
+  // Dental tools -> Dental pools
+  const dentalTools = ['check_availability', 'book_appointment', 'get_patient_info', 'reschedule_appointment', 'cancel_appointment', 'get_appointment_history'];
+  if (dentalTools.some(t => toolNames.includes(t))) {
+    poolTypes.push('patients', 'children', 'appointments', 'available_slots');
+  }
+
+  return [...new Set(poolTypes)]; // Remove duplicates
+}
+
+// ============================================================================
 // TOOL CONFIG
 // ============================================================================
 
@@ -182,6 +426,16 @@ export interface SMSTemplate {
   templateName: string;
   senderName: string;
   messageTemplate: string;
+}
+
+// ============================================================================
+// AMBIENT AUDIO CONFIG
+// ============================================================================
+
+export interface AmbientAudioConfig {
+  enabled: boolean;
+  volume: number;  // 0-1 scale
+  audioFile: string;  // Path to audio file (e.g., '/audio/office-ambience.mp3')
 }
 
 // ============================================================================
@@ -256,6 +510,7 @@ export interface DemoConfigRow {
   description: string | null;
   is_active: number;
   is_default: number;
+  ambient_audio_json: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -346,6 +601,7 @@ export interface UILabelsRow {
 // ============================================================================
 
 export type PredefinedToolName =
+  // Healthcare/Dental tools
   | 'check_availability'
   | 'book_appointment'
   | 'get_patient_info'
@@ -359,7 +615,18 @@ export type PredefinedToolName =
   | 'get_clinic_hours'
   | 'get_directions'
   | 'get_available_services'
-  | 'get_appointment_preparation';
+  | 'get_appointment_preparation'
+  // NEMT (Non-Emergency Medical Transportation) tools
+  | 'verify_member'
+  | 'get_member_info'
+  | 'check_ride_eligibility'
+  | 'search_address'
+  | 'book_ride'
+  | 'get_ride_status'
+  | 'cancel_ride'
+  | 'update_ride'
+  | 'add_companion'
+  | 'check_nemt_availability';
 
 export const PREDEFINED_TOOLS: Record<PredefinedToolName, Omit<ToolConfig, 'id' | 'demoConfigId'>> = {
   check_availability: {
@@ -580,6 +847,205 @@ export const PREDEFINED_TOOLS: Record<PredefinedToolName, Omit<ToolConfig, 'id' 
       required: []
     },
     mockResponseDelayMs: 100
+  },
+
+  // ============================================================================
+  // NEMT (Non-Emergency Medical Transportation) TOOLS
+  // ============================================================================
+
+  verify_member: {
+    toolName: 'verify_member',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Verify Member',
+    description: 'Verify member identity using Member ID, name, and date of birth',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        member_id: { type: 'string', description: 'Member ID number' },
+        first_name: { type: 'string', description: 'Member first name' },
+        last_name: { type: 'string', description: 'Member last name' },
+        date_of_birth: { type: 'string', description: 'Date of birth (YYYY-MM-DD)' }
+      },
+      required: ['member_id', 'first_name', 'last_name', 'date_of_birth']
+    },
+    mockResponseDelayMs: 400
+  },
+
+  get_member_info: {
+    toolName: 'get_member_info',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Get Member Info',
+    description: 'Retrieve full member profile including address, assistance type, and ride history',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        member_id: { type: 'string', description: 'Member ID number' }
+      },
+      required: ['member_id']
+    },
+    mockResponseDelayMs: 300
+  },
+
+  check_ride_eligibility: {
+    toolName: 'check_ride_eligibility',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Check Ride Eligibility',
+    description: 'Check remaining rides and eligibility status for the current benefit period',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        member_id: { type: 'string', description: 'Member ID number' }
+      },
+      required: ['member_id']
+    },
+    mockResponseDelayMs: 300
+  },
+
+  search_address: {
+    toolName: 'search_address',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Search Address',
+    description: 'Validate and autocomplete an address for pickup or dropoff',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Address search query' },
+        city: { type: 'string', description: 'City to filter results' },
+        state: { type: 'string', description: 'State to filter results' }
+      },
+      required: ['query']
+    },
+    mockResponseDelayMs: 200
+  },
+
+  book_ride: {
+    toolName: 'book_ride',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Book Ride',
+    description: 'Book a one-way or round-trip medical transportation ride',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        member_id: { type: 'string', description: 'Member ID number' },
+        trip_type: { type: 'string', enum: ['one_way', 'round_trip'], description: 'Type of trip' },
+        pickup_address: { type: 'string', description: 'Full pickup address' },
+        pickup_city: { type: 'string', description: 'Pickup city' },
+        pickup_state: { type: 'string', description: 'Pickup state' },
+        pickup_zip: { type: 'string', description: 'Pickup ZIP code' },
+        dropoff_address: { type: 'string', description: 'Full dropoff address' },
+        dropoff_city: { type: 'string', description: 'Dropoff city' },
+        dropoff_state: { type: 'string', description: 'Dropoff state' },
+        dropoff_zip: { type: 'string', description: 'Dropoff ZIP code' },
+        pickup_date: { type: 'string', description: 'Pickup date (YYYY-MM-DD)' },
+        pickup_time: { type: 'string', description: 'Pickup time (HH:MM)' },
+        appointment_time: { type: 'string', description: 'Appointment time (HH:MM)' },
+        assistance_type: { type: 'string', enum: ['ambulatory', 'wheelchair', 'stretcher', 'wheelchair_xl'], description: 'Type of mobility assistance needed' },
+        facility_name: { type: 'string', description: 'Name of medical facility' },
+        return_trip_type: { type: 'string', enum: ['scheduled', 'will_call'], description: 'Return trip type' },
+        return_pickup_time: { type: 'string', description: 'Return pickup time if scheduled (HH:MM)' },
+        notes: { type: 'string', description: 'Additional notes or special instructions' }
+      },
+      required: ['member_id', 'trip_type', 'pickup_address', 'pickup_city', 'pickup_state', 'pickup_zip', 'dropoff_address', 'dropoff_city', 'dropoff_state', 'dropoff_zip', 'pickup_date', 'pickup_time', 'appointment_time', 'assistance_type']
+    },
+    mockResponseDelayMs: 600
+  },
+
+  get_ride_status: {
+    toolName: 'get_ride_status',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Get Ride Status',
+    description: 'Check the status of an existing ride using confirmation number',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        confirmation_number: { type: 'string', description: 'Ride confirmation number' }
+      },
+      required: ['confirmation_number']
+    },
+    mockResponseDelayMs: 300
+  },
+
+  cancel_ride: {
+    toolName: 'cancel_ride',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Cancel Ride',
+    description: 'Cancel a scheduled ride',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        confirmation_number: { type: 'string', description: 'Ride confirmation number' },
+        reason: { type: 'string', description: 'Reason for cancellation' }
+      },
+      required: ['confirmation_number']
+    },
+    mockResponseDelayMs: 400
+  },
+
+  update_ride: {
+    toolName: 'update_ride',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Update Ride',
+    description: 'Modify details of an existing ride',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        confirmation_number: { type: 'string', description: 'Ride confirmation number' },
+        pickup_time: { type: 'string', description: 'New pickup time (HH:MM)' },
+        pickup_date: { type: 'string', description: 'New pickup date (YYYY-MM-DD)' },
+        appointment_time: { type: 'string', description: 'New appointment time (HH:MM)' },
+        return_trip_type: { type: 'string', enum: ['scheduled', 'will_call'], description: 'Return trip type' },
+        return_pickup_time: { type: 'string', description: 'Return pickup time if scheduled (HH:MM)' },
+        notes: { type: 'string', description: 'Additional notes' }
+      },
+      required: ['confirmation_number']
+    },
+    mockResponseDelayMs: 400
+  },
+
+  add_companion: {
+    toolName: 'add_companion',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Add Companion',
+    description: 'Add a companion to travel with the member on their ride',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        confirmation_number: { type: 'string', description: 'Ride confirmation number' },
+        companion_name: { type: 'string', description: 'Companion full name' },
+        companion_phone: { type: 'string', description: 'Companion phone number' },
+        relationship: { type: 'string', description: 'Relationship to member (optional)' }
+      },
+      required: ['confirmation_number', 'companion_name', 'companion_phone']
+    },
+    mockResponseDelayMs: 300
+  },
+
+  check_nemt_availability: {
+    toolName: 'check_nemt_availability',
+    toolType: 'predefined',
+    isEnabled: true,
+    displayName: 'Check NEMT Availability',
+    description: 'Check vehicle availability for a specific date, time, and location',
+    parametersSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'Date to check (YYYY-MM-DD)' },
+        time: { type: 'string', description: 'Time to check (HH:MM)' },
+        pickup_zip: { type: 'string', description: 'Pickup ZIP code' },
+        assistance_type: { type: 'string', enum: ['ambulatory', 'wheelchair', 'stretcher', 'wheelchair_xl'], description: 'Type of vehicle needed' }
+      },
+      required: ['date', 'time', 'pickup_zip', 'assistance_type']
+    },
+    mockResponseDelayMs: 400
   }
 };
 
@@ -649,6 +1115,7 @@ export function createEmptyDemoConfig(): Partial<DemoConfig> {
     },
     toolConfigs: [],
     smsTemplates: [],
+    mockDataPools: [],
     uiLabels: {
       id: '',
       demoConfigId: '',
@@ -661,6 +1128,11 @@ export function createEmptyDemoConfig(): Partial<DemoConfig> {
       callButtonText: 'Start Demo Call',
       endCallButtonText: 'End Call',
       badgeText: 'VOICE AI DEMO'
+    },
+    ambientAudio: {
+      enabled: false,
+      volume: 0.3,
+      audioFile: '/audio/office-ambience.mp3'
     }
   };
 }

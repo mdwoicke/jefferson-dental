@@ -20,6 +20,8 @@ export interface ProviderConfig {
   systemInstruction: string;
   voiceName: string;
   toolConfigs?: import('./types/demo-config').ToolConfig[];
+  mockDataPools?: import('./types/demo-config').MockDataPool[];
+  demoConfigId?: string;
 }
 
 export interface AudioMessage {

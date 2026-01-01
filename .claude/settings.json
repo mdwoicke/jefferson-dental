@@ -1,0 +1,10 @@
+{
+  "skills": [
+    {
+      "name": "create-demo-from-transcript",
+      "command": "/create-demo",
+      "description": "Create a production-quality voice AI demo from a call transcript and optional website URL",
+      "file": "skills/create-demo-from-transcript.md"
+    }
+  ]
+}

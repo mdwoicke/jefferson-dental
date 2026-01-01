@@ -12,7 +12,7 @@ const DB_KEY = 'sqliteDb';
 const DB_VERSION = 1;
 
 // Schema version for migrations
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 6;
 
 // Singleton instance
 let sqlInstance: SqlJsStatic | null = null;
@@ -250,6 +250,67 @@ function applyMigrations(db: Database, fromVersion: number): void {
       console.log('✅ Migration v1 → v2 completed');
     } catch (error) {
       console.error('❌ Migration v1 → v2 failed:', error);
+      throw error;
+    }
+  }
+
+  // Migration to version 5: Add demo_mock_data_pools table
+  // (Skipping v3, v4 as they were demo config tables that should already exist if demo system works)
+  if (currentVersion < 5) {
+    console.log('🔧 Applying migration: → v5 (Add demo_mock_data_pools table)');
+
+    try {
+      // Check if table already exists
+      const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='demo_mock_data_pools'");
+
+      if (tables.length === 0 || tables[0].values.length === 0) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS demo_mock_data_pools (
+            id TEXT PRIMARY KEY,
+            demo_config_id TEXT NOT NULL,
+            pool_type TEXT NOT NULL,
+            pool_name TEXT NOT NULL,
+            records_json TEXT NOT NULL,
+            schema_json TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (demo_config_id) REFERENCES demo_configs(id) ON DELETE CASCADE,
+            UNIQUE(demo_config_id, pool_type)
+          )
+        `);
+        db.exec('CREATE INDEX IF NOT EXISTS idx_demo_mock_pools_demo ON demo_mock_data_pools(demo_config_id)');
+        db.exec('CREATE INDEX IF NOT EXISTS idx_demo_mock_pools_type ON demo_mock_data_pools(pool_type)');
+        console.log('  ✅ Created demo_mock_data_pools table');
+      }
+
+      // Update schema version
+      db.exec(`INSERT OR IGNORE INTO schema_version (version, description) VALUES (5, 'Added demo_mock_data_pools table for configurable per-demo mock data')`);
+      console.log('✅ Migration → v5 completed');
+    } catch (error) {
+      console.error('❌ Migration → v5 failed:', error);
+      throw error;
+    }
+  }
+
+  // Migration to version 6: Add ambient_audio_json column to demo_configs
+  if (currentVersion < 6) {
+    console.log('🔧 Applying migration: → v6 (Add ambient_audio_json column)');
+
+    try {
+      // Check if column already exists
+      const tableInfo = db.exec("PRAGMA table_info(demo_configs)");
+      const columns = tableInfo[0]?.values.map((row) => row[1]) || [];
+
+      if (!columns.includes('ambient_audio_json')) {
+        db.exec("ALTER TABLE demo_configs ADD COLUMN ambient_audio_json TEXT");
+        console.log('  ✅ Added ambient_audio_json column to demo_configs');
+      }
+
+      // Update schema version
+      db.exec(`INSERT OR IGNORE INTO schema_version (version, description) VALUES (6, 'Added ambient_audio_json column to demo_configs for background audio settings')`);
+      console.log('✅ Migration → v6 completed');
+    } catch (error) {
+      console.error('❌ Migration → v6 failed:', error);
       throw error;
     }
   }

@@ -257,6 +257,13 @@ export const DemoEditForm: React.FC = () => {
     badgeText: 'VOICE AI DEMO',
   });
 
+  // Ambient Audio state
+  const [ambientAudioData, setAmbientAudioData] = useState({
+    enabled: false,
+    volume: 0.3,
+    audioFile: '/audio/office-ambience.mp3',
+  });
+
   // SMS Opt-in Template state
   const [smsData, setSmsData] = useState({
     senderName: '',
@@ -279,6 +286,7 @@ Reply STOP to unsubscribe.`,
   // Tools configuration state
   const [toolConfigs, setToolConfigs] = useState<ToolConfig[]>([]);
   const [showCustomToolForm, setShowCustomToolForm] = useState(false);
+  const [editingToolName, setEditingToolName] = useState<string | null>(null); // null = adding new, string = editing existing
   const [customTool, setCustomTool] = useState<Partial<ToolConfig>>({
     toolName: '',
     displayName: '',
@@ -369,6 +377,15 @@ Reply STOP to unsubscribe.`,
             callButtonText: demo.uiLabels.callButtonText,
             endCallButtonText: demo.uiLabels.endCallButtonText,
             badgeText: demo.uiLabels.badgeText,
+          });
+        }
+
+        // Load ambient audio config
+        if (demo.ambientAudio) {
+          setAmbientAudioData({
+            enabled: demo.ambientAudio.enabled,
+            volume: demo.ambientAudio.volume,
+            audioFile: demo.ambientAudio.audioFile,
           });
         }
 
@@ -492,6 +509,11 @@ Reply STOP to unsubscribe.`,
           badgeText: uiData.badgeText.trim(),
         } as UILabels,
         toolConfigs: toolConfigs,
+        ambientAudio: {
+          enabled: ambientAudioData.enabled,
+          volume: ambientAudioData.volume,
+          audioFile: ambientAudioData.audioFile.trim(),
+        },
       };
 
       if (isEditMode) {
@@ -1069,7 +1091,20 @@ Reply STOP to unsubscribe.`,
                     <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Custom Tools</h4>
                     <button
                       type="button"
-                      onClick={() => setShowCustomToolForm(true)}
+                      onClick={() => {
+                        setEditingToolName(null);
+                        setCustomTool({
+                          toolName: '',
+                          displayName: '',
+                          description: '',
+                          toolType: 'custom',
+                          isEnabled: true,
+                          parametersSchema: { type: 'object', properties: {}, required: [] },
+                          mockResponseTemplate: '{}',
+                          mockResponseDelayMs: 300
+                        });
+                        setShowCustomToolForm(true);
+                      }}
                       className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1099,15 +1134,41 @@ Reply STOP to unsubscribe.`,
                               </div>
                             )}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setToolConfigs(toolConfigs.filter(t => t.toolName !== tool.toolName))}
-                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingToolName(tool.toolName);
+                                setCustomTool({
+                                  toolName: tool.toolName,
+                                  displayName: tool.displayName,
+                                  description: tool.description,
+                                  toolType: 'custom',
+                                  isEnabled: tool.isEnabled,
+                                  parametersSchema: tool.parametersSchema,
+                                  mockResponseTemplate: tool.mockResponseTemplate,
+                                  mockResponseDelayMs: tool.mockResponseDelayMs
+                                });
+                                setShowCustomToolForm(true);
+                              }}
+                              className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                              title="Edit tool"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setToolConfigs(toolConfigs.filter(t => t.toolName !== tool.toolName))}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                              title="Delete tool"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1154,10 +1215,15 @@ Reply STOP to unsubscribe.`,
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
                   {/* Modal Header */}
                   <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Add Custom Tool</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                      {editingToolName ? 'Edit Custom Tool' : 'Add Custom Tool'}
+                    </h3>
                     <button
                       type="button"
-                      onClick={() => setShowCustomToolForm(false)}
+                      onClick={() => {
+                        setShowCustomToolForm(false);
+                        setEditingToolName(null);
+                      }}
                       className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                     >
                       <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1176,10 +1242,13 @@ Reply STOP to unsubscribe.`,
                         type="text"
                         value={customTool.toolName}
                         onChange={(e) => setCustomTool({ ...customTool, toolName: e.target.value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') })}
-                        className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono"
+                        disabled={!!editingToolName}
+                        className={`w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono ${editingToolName ? 'opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-600' : ''}`}
                         placeholder="e.g., send_invoice"
                       />
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Use snake_case (letters, numbers, underscores only)</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                        {editingToolName ? 'Tool name cannot be changed' : 'Use snake_case (letters, numbers, underscores only)'}
+                      </p>
                     </div>
 
                     <div>
@@ -1227,7 +1296,10 @@ Reply STOP to unsubscribe.`,
                   <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                     <button
                       type="button"
-                      onClick={() => setShowCustomToolForm(false)}
+                      onClick={() => {
+                        setShowCustomToolForm(false);
+                        setEditingToolName(null);
+                      }}
                       className="px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium transition-colors"
                     >
                       Cancel
@@ -1236,20 +1308,40 @@ Reply STOP to unsubscribe.`,
                       type="button"
                       onClick={() => {
                         if (!customTool.toolName || !customTool.displayName) return;
-                        const newTool: ToolConfig = {
-                          id: `TC-${Date.now()}`,
-                          demoConfigId: id || '',
-                          toolName: customTool.toolName,
-                          displayName: customTool.displayName,
-                          description: customTool.description || '',
-                          toolType: 'custom',
-                          isEnabled: true,
-                          parametersSchema: customTool.parametersSchema || { type: 'object', properties: {}, required: [] },
-                          mockResponseTemplate: customTool.mockResponseTemplate,
-                          mockResponseDelayMs: customTool.mockResponseDelayMs || 300
-                        };
-                        setToolConfigs([...toolConfigs, newTool]);
+
+                        if (editingToolName) {
+                          // Update existing tool
+                          setToolConfigs(toolConfigs.map(t =>
+                            t.toolName === editingToolName
+                              ? {
+                                  ...t,
+                                  displayName: customTool.displayName!,
+                                  description: customTool.description || '',
+                                  parametersSchema: customTool.parametersSchema || { type: 'object', properties: {}, required: [] },
+                                  mockResponseTemplate: customTool.mockResponseTemplate,
+                                  mockResponseDelayMs: customTool.mockResponseDelayMs || 300
+                                }
+                              : t
+                          ));
+                        } else {
+                          // Add new tool
+                          const newTool: ToolConfig = {
+                            id: `TC-${Date.now()}`,
+                            demoConfigId: id || '',
+                            toolName: customTool.toolName,
+                            displayName: customTool.displayName,
+                            description: customTool.description || '',
+                            toolType: 'custom',
+                            isEnabled: true,
+                            parametersSchema: customTool.parametersSchema || { type: 'object', properties: {}, required: [] },
+                            mockResponseTemplate: customTool.mockResponseTemplate,
+                            mockResponseDelayMs: customTool.mockResponseDelayMs || 300
+                          };
+                          setToolConfigs([...toolConfigs, newTool]);
+                        }
+
                         setShowCustomToolForm(false);
+                        setEditingToolName(null);
                         setCustomTool({
                           toolName: '',
                           displayName: '',
@@ -1264,7 +1356,7 @@ Reply STOP to unsubscribe.`,
                       disabled={!customTool.toolName || !customTool.displayName}
                       className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Add Tool
+                      {editingToolName ? 'Save Changes' : 'Add Tool'}
                     </button>
                   </div>
                 </div>
@@ -1657,6 +1749,69 @@ Reply STOP to unsubscribe.`,
                       className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                       placeholder="e.g., Enhanced Demo"
                     />
+                  </div>
+                </div>
+
+                {/* Ambient Audio Settings */}
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Background Ambient Audio</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                    Add subtle background audio (like office sounds) during calls for a more realistic experience.
+                  </p>
+
+                  <div className="space-y-4">
+                    {/* Enable Toggle */}
+                    <div className="flex items-center gap-3">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ambientAudioData.enabled}
+                          onChange={(e) => setAmbientAudioData({ ...ambientAudioData, enabled: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                      </label>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Enable ambient audio
+                      </span>
+                    </div>
+
+                    {/* Volume Slider - only show when enabled */}
+                    {ambientAudioData.enabled && (
+                      <div className="grid md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                            Volume: {Math.round(ambientAudioData.volume * 100)}%
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={ambientAudioData.volume}
+                            onChange={(e) => setAmbientAudioData({ ...ambientAudioData, volume: parseFloat(e.target.value) })}
+                            className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                          />
+                          <div className="flex justify-between text-xs text-slate-400 mt-1">
+                            <span>0%</span>
+                            <span>50%</span>
+                            <span>100%</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                            Audio File Path
+                          </label>
+                          <input
+                            type="text"
+                            value={ambientAudioData.audioFile}
+                            onChange={(e) => setAmbientAudioData({ ...ambientAudioData, audioFile: e.target.value })}
+                            className="w-full px-4 py-3 border-2 border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                            placeholder="/audio/office-ambience.mp3"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

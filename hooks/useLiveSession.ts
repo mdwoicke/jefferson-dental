@@ -61,6 +61,7 @@ export const useLiveSession = (
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const [isSecureContext, setIsSecureContext] = useState<boolean>(true);
+  const [ambientVolume, setAmbientVolumeState] = useState<number>(0.3); // 0-1 scale
 
   // Use ref to keep dbAdapter current (fixes stale closure issue)
   const dbAdapterRef = useRef(dbAdapter);
@@ -75,8 +76,10 @@ export const useLiveSession = (
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const outputNodeRef = useRef<GainNode | null>(null);
 
-  // Background Noise Element
-  const backgroundAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Ambient Audio (Web Audio API based)
+  const ambientSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const ambientGainRef = useRef<GainNode | null>(null);
+  const ambientBufferRef = useRef<AudioBuffer | null>(null);
 
   // Audio Queue Management
   const nextStartTimeRef = useRef<number>(0);
@@ -103,6 +106,16 @@ export const useLiveSession = (
     const newState = !isMutedRef.current;
     isMutedRef.current = newState;
     setIsMuted(newState);
+  }, []);
+
+  // Set ambient audio volume (0-1 scale)
+  const setAmbientVolume = useCallback((volume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, volume));
+    setAmbientVolumeState(clampedVolume);
+    // Update gain node in real-time if it exists
+    if (ambientGainRef.current) {
+      ambientGainRef.current.gain.value = clampedVolume;
+    }
   }, []);
 
   // Enumerate available audio input devices
@@ -152,37 +165,71 @@ export const useLiveSession = (
     enumerateAudioDevices();
   }, []);
 
-  const stopBackgroundNoise = useCallback(() => {
-    if (backgroundAudioRef.current) {
-        console.log("Stopping background ambience");
-        backgroundAudioRef.current.pause();
-        backgroundAudioRef.current.currentTime = 0;
-        backgroundAudioRef.current = null;
+  // Load ambient audio file into AudioBuffer (call once during connect)
+  const loadAmbientAudio = useCallback(async (audioContext: AudioContext, audioFile: string) => {
+    try {
+      console.log(`🔊 Loading ambient audio from ${audioFile}...`);
+      const response = await fetch(audioFile);
+      if (!response.ok) {
+        console.warn(`⏭️  Ambient audio file not found at ${audioFile} - skipping`);
+        return;
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      ambientBufferRef.current = await audioContext.decodeAudioData(arrayBuffer);
+      console.log("✅ Ambient audio loaded:", ambientBufferRef.current.duration.toFixed(1), "seconds");
+    } catch (e) {
+      console.warn("⚠️  Failed to load ambient audio:", e);
     }
   }, []);
 
-  const playOfficeAmbience = useCallback(() => {
-    try {
-        console.log("Initializing background ambience...");
-        // Disable background audio for now to avoid CORS/loading issues
-        // You can add a local audio file later if needed
-        console.log("⏭️  Background audio skipped (not required for voice agent)");
-        return;
-
-        // Commented out external audio source
-        // const audio = new Audio('https://actions.google.com/sounds/v1/ambiences/office_setting.ogg');
-        // backgroundAudioRef.current = audio;
-        // audio.loop = true;
-        // audio.volume = 0.5;
-        // audio.preload = 'auto';
-        // const playPromise = audio.play();
-    } catch (e) {
-        console.error("Failed to setup background noise", e);
+  // Start looping ambient audio mixed with AI voice output
+  const startAmbientAudio = useCallback((audioContext: AudioContext, outputNode: GainNode) => {
+    if (!ambientBufferRef.current) {
+      console.log("⏭️  No ambient audio buffer - skipping ambient playback");
+      return;
     }
+
+    try {
+      // Create gain node for ambient volume control (separate from AI voice)
+      const ambientGain = audioContext.createGain();
+      ambientGain.gain.value = ambientVolume; // Use current volume state
+      ambientGain.connect(outputNode);
+      ambientGainRef.current = ambientGain;
+
+      // Create looping source
+      const source = audioContext.createBufferSource();
+      source.buffer = ambientBufferRef.current;
+      source.loop = true;
+      source.connect(ambientGain);
+      source.start();
+      ambientSourceRef.current = source;
+
+      console.log(`🔊 Ambient audio started (${Math.round(ambientVolume * 100)}% volume, looping)`);
+    } catch (e) {
+      console.error("❌ Failed to start ambient audio:", e);
+    }
+  }, [ambientVolume]);
+
+  // Stop ambient audio playback
+  const stopAmbientAudio = useCallback(() => {
+    if (ambientSourceRef.current) {
+      try {
+        ambientSourceRef.current.stop();
+        ambientSourceRef.current.disconnect();
+      } catch (e) { /* ignore - may already be stopped */ }
+      ambientSourceRef.current = null;
+    }
+    if (ambientGainRef.current) {
+      try {
+        ambientGainRef.current.disconnect();
+      } catch (e) { /* ignore */ }
+      ambientGainRef.current = null;
+    }
+    console.log("🔇 Ambient audio stopped");
   }, []);
 
   const cleanupAudio = useCallback(() => {
-    stopBackgroundNoise();
+    stopAmbientAudio();
 
     // Stop all playing sources
     sourcesRef.current.forEach(source => {
@@ -205,7 +252,7 @@ export const useLiveSession = (
     processorRef.current = null;
     outputNodeRef.current = null;
     nextStartTimeRef.current = 0;
-  }, [stopBackgroundNoise]);
+  }, [stopAmbientAudio]);
 
   const disconnect = useCallback(async () => {
     if (voiceProviderRef.current) {
@@ -456,8 +503,6 @@ export const useLiveSession = (
     console.log('🔌 CONNECT CALLBACK CALLED');
     console.log('📊 dbAdapter status:', dbAdapter ? 'AVAILABLE ✅' : 'NULL ❌');
 
-    // Start Background Noise IMMEDIATELY to capture user gesture
-    playOfficeAmbience();
     setError(null);
     setIsLoadingPatient(true);
 
@@ -517,6 +562,18 @@ export const useLiveSession = (
       const outputNode = outputCtx.createGain();
       outputNode.connect(outputCtx.destination);
       outputNodeRef.current = outputNode;
+
+      // Load and start ambient audio if enabled in demo config
+      const ambientConfig = demoConfig?.ambientAudio;
+      if (ambientConfig?.enabled) {
+        // Set volume from config
+        setAmbientVolumeState(ambientConfig.volume);
+        // Load and start with config settings
+        await loadAmbientAudio(outputCtx, ambientConfig.audioFile);
+        startAmbientAudio(outputCtx, outputNode);
+      } else {
+        console.log("⏭️  Ambient audio disabled in demo config");
+      }
 
       // Microphone Stream
       console.log('🌐 Current URL:', window.location.href);
@@ -745,7 +802,7 @@ export const useLiveSession = (
           setIsConnected(false);
           setIsMuted(false);
           isMutedRef.current = false;
-          stopBackgroundNoise();
+          stopAmbientAudio();
         },
         onError: (err) => {
           console.error(`${provider.toUpperCase()} session error:`, err);
@@ -767,7 +824,7 @@ export const useLiveSession = (
       setIsLoadingPatient(false);
       cleanupAudio();
     }
-  }, [provider, selectedPatientId, dbAdapter, demoConfig, disconnect, cleanupAudio, playOfficeAmbience, stopBackgroundNoise, handleTranscript, handleFunctionCall, handleFunctionResult]);
+  }, [provider, selectedPatientId, dbAdapter, demoConfig, disconnect, cleanupAudio, loadAmbientAudio, startAmbientAudio, stopAmbientAudio, handleTranscript, handleFunctionCall, handleFunctionResult]);
 
   return {
     connect,
@@ -788,6 +845,9 @@ export const useLiveSession = (
     setSelectedDeviceId,
     enumerateAudioDevices,
     // Secure context check (HTTPS required for microphone on non-localhost)
-    isSecureContext
+    isSecureContext,
+    // Ambient audio volume control
+    ambientVolume,
+    setAmbientVolume
   };
 };

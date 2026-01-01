@@ -5,6 +5,8 @@ import { AppointmentService } from '../services/appointment-service';
 import { CRMService } from '../services/crm-service';
 import { NotificationService } from '../services/notification-service';
 import { ClinicService } from '../services/clinic-service';
+import { NEMTService, setMockDataService } from '../services/nemt-service';
+import { MockDataService } from '../services/mock-data-service';
 
 /**
  * OpenAI Realtime API provider for browser
@@ -38,6 +40,9 @@ export class OpenAIProvider implements IVoiceProvider {
 
   // Tool configs from demo configuration
   private configuredToolConfigs: import('../types/demo-config').ToolConfig[] = [];
+
+  // Mock data service for per-demo data pools
+  private mockDataService: MockDataService | null = null;
 
   constructor(dbAdapter?: DatabaseAdapter) {
     if (dbAdapter) {
@@ -451,6 +456,166 @@ export class OpenAIProvider implements IVoiceProvider {
           properties: {},
           required: []
         }
+      },
+
+      // ============================================================================
+      // NEMT (Non-Emergency Medical Transportation) TOOLS
+      // ============================================================================
+
+      {
+        type: 'function',
+        name: 'verify_member',
+        description: 'Verify member identity using Member ID, name, and date of birth. MUST be called before any account access.',
+        parameters: {
+          type: 'object',
+          properties: {
+            member_id: { type: 'string', description: 'Member ID number' },
+            first_name: { type: 'string', description: 'Member first name' },
+            last_name: { type: 'string', description: 'Member last name' },
+            date_of_birth: { type: 'string', description: 'Date of birth (YYYY-MM-DD)' }
+          },
+          required: ['member_id', 'first_name', 'last_name', 'date_of_birth']
+        }
+      },
+      {
+        type: 'function',
+        name: 'get_member_info',
+        description: 'Retrieve full member profile including address, assistance type, and ride history',
+        parameters: {
+          type: 'object',
+          properties: {
+            member_id: { type: 'string', description: 'Member ID number' }
+          },
+          required: ['member_id']
+        }
+      },
+      {
+        type: 'function',
+        name: 'check_ride_eligibility',
+        description: 'Check remaining rides and eligibility status for the current benefit period',
+        parameters: {
+          type: 'object',
+          properties: {
+            member_id: { type: 'string', description: 'Member ID number' }
+          },
+          required: ['member_id']
+        }
+      },
+      {
+        type: 'function',
+        name: 'search_address',
+        description: 'Validate and autocomplete an address for pickup or dropoff',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Address search query' },
+            city: { type: 'string', description: 'City to filter results' },
+            state: { type: 'string', description: 'State to filter results' }
+          },
+          required: ['query']
+        }
+      },
+      {
+        type: 'function',
+        name: 'book_ride',
+        description: 'Book a one-way or round-trip medical transportation ride',
+        parameters: {
+          type: 'object',
+          properties: {
+            member_id: { type: 'string', description: 'Member ID number' },
+            trip_type: { type: 'string', enum: ['one_way', 'round_trip'], description: 'Type of trip' },
+            pickup_address: { type: 'string', description: 'Full pickup address' },
+            pickup_city: { type: 'string', description: 'Pickup city' },
+            pickup_state: { type: 'string', description: 'Pickup state' },
+            pickup_zip: { type: 'string', description: 'Pickup ZIP code' },
+            dropoff_address: { type: 'string', description: 'Full dropoff address' },
+            dropoff_city: { type: 'string', description: 'Dropoff city' },
+            dropoff_state: { type: 'string', description: 'Dropoff state' },
+            dropoff_zip: { type: 'string', description: 'Dropoff ZIP code' },
+            pickup_date: { type: 'string', description: 'Pickup date (YYYY-MM-DD)' },
+            pickup_time: { type: 'string', description: 'Pickup time (HH:MM)' },
+            appointment_time: { type: 'string', description: 'Appointment time (HH:MM)' },
+            assistance_type: { type: 'string', enum: ['ambulatory', 'wheelchair', 'stretcher', 'wheelchair_xl'], description: 'Type of mobility assistance needed' },
+            facility_name: { type: 'string', description: 'Name of medical facility' },
+            return_trip_type: { type: 'string', enum: ['scheduled', 'will_call'], description: 'Return trip type' },
+            return_pickup_time: { type: 'string', description: 'Return pickup time if scheduled (HH:MM)' },
+            notes: { type: 'string', description: 'Additional notes or special instructions' }
+          },
+          required: ['member_id', 'trip_type', 'pickup_address', 'pickup_city', 'pickup_state', 'pickup_zip', 'dropoff_address', 'dropoff_city', 'dropoff_state', 'dropoff_zip', 'pickup_date', 'pickup_time', 'appointment_time', 'assistance_type']
+        }
+      },
+      {
+        type: 'function',
+        name: 'get_ride_status',
+        description: 'Check the status of an existing ride using confirmation number',
+        parameters: {
+          type: 'object',
+          properties: {
+            confirmation_number: { type: 'string', description: 'Ride confirmation number' }
+          },
+          required: ['confirmation_number']
+        }
+      },
+      {
+        type: 'function',
+        name: 'cancel_ride',
+        description: 'Cancel a scheduled ride',
+        parameters: {
+          type: 'object',
+          properties: {
+            confirmation_number: { type: 'string', description: 'Ride confirmation number' },
+            reason: { type: 'string', description: 'Reason for cancellation' }
+          },
+          required: ['confirmation_number']
+        }
+      },
+      {
+        type: 'function',
+        name: 'update_ride',
+        description: 'Modify details of an existing ride',
+        parameters: {
+          type: 'object',
+          properties: {
+            confirmation_number: { type: 'string', description: 'Ride confirmation number' },
+            pickup_time: { type: 'string', description: 'New pickup time (HH:MM)' },
+            pickup_date: { type: 'string', description: 'New pickup date (YYYY-MM-DD)' },
+            appointment_time: { type: 'string', description: 'New appointment time (HH:MM)' },
+            return_trip_type: { type: 'string', enum: ['scheduled', 'will_call'], description: 'Return trip type' },
+            return_pickup_time: { type: 'string', description: 'Return pickup time if scheduled (HH:MM)' },
+            notes: { type: 'string', description: 'Additional notes' }
+          },
+          required: ['confirmation_number']
+        }
+      },
+      {
+        type: 'function',
+        name: 'add_companion',
+        description: 'Add a companion to travel with the member on their ride',
+        parameters: {
+          type: 'object',
+          properties: {
+            confirmation_number: { type: 'string', description: 'Ride confirmation number' },
+            companion_name: { type: 'string', description: 'Companion full name' },
+            companion_phone: { type: 'string', description: 'Companion phone number' },
+            relationship: { type: 'string', description: 'Relationship to member (optional)' }
+          },
+          required: ['confirmation_number', 'companion_name', 'companion_phone']
+        }
+      },
+      {
+        type: 'function',
+        name: 'check_nemt_availability',
+        description: 'Check vehicle availability for a specific date, time, and location',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: { type: 'string', description: 'Date to check (YYYY-MM-DD)' },
+            time: { type: 'string', description: 'Time to check (HH:MM)' },
+            pickup_zip: { type: 'string', description: 'Pickup ZIP code' },
+            assistance_type: { type: 'string', enum: ['ambulatory', 'wheelchair', 'stretcher', 'wheelchair_xl'], description: 'Type of vehicle needed' }
+          },
+          required: ['date', 'time', 'pickup_zip', 'assistance_type']
+        }
       }
     ];
   }
@@ -460,6 +625,22 @@ export class OpenAIProvider implements IVoiceProvider {
 
     // Store tool configs for later reference
     this.configuredToolConfigs = config.toolConfigs || [];
+
+    // Load mock data pools if provided in config
+    if (config.mockDataPools && config.mockDataPools.length > 0) {
+      console.log(`📦 Loading ${config.mockDataPools.length} mock data pools for demo`);
+      this.mockDataService = new MockDataService();
+      this.mockDataService.loadPools(config.mockDataPools);
+      if (config.demoConfigId) {
+        this.mockDataService.setDemoConfigId(config.demoConfigId);
+      }
+      // Inject into NEMT service
+      setMockDataService(this.mockDataService);
+    } else {
+      // Clear any previous mock data
+      setMockDataService(null);
+      this.mockDataService = null;
+    }
 
     // Choose tool source based on system mode
     let tools: any[] = [];
@@ -888,6 +1069,29 @@ export class OpenAIProvider implements IVoiceProvider {
         return await this.handleGetAvailableServices(args);
       case 'get_appointment_preparation':
         return await this.handleGetAppointmentPreparation(args);
+
+      // NEMT (Non-Emergency Medical Transportation) tools
+      case 'verify_member':
+        return this.handleVerifyMember(args);
+      case 'get_member_info':
+        return this.handleGetMemberInfo(args);
+      case 'check_ride_eligibility':
+        return this.handleCheckRideEligibility(args);
+      case 'search_address':
+        return this.handleSearchAddress(args);
+      case 'book_ride':
+        return this.handleBookRide(args);
+      case 'get_ride_status':
+        return this.handleGetRideStatus(args);
+      case 'cancel_ride':
+        return this.handleCancelRide(args);
+      case 'update_ride':
+        return this.handleUpdateRide(args);
+      case 'add_companion':
+        return this.handleAddCompanion(args);
+      case 'check_nemt_availability':
+        return this.handleCheckNEMTAvailability(args);
+
       default:
         // Check if this is a custom tool from demo config
         const customTool = this.configuredToolConfigs.find(
@@ -1119,12 +1323,34 @@ export class OpenAIProvider implements IVoiceProvider {
    * Handle send_confirmation_sms function call
    */
   private async handleSendConfirmationSMS(args: {
-    phone_number: string;
-    appointment_details: string;
+    phone_number?: string;
+    appointment_details?: string;
   }): Promise<any> {
     console.log('📱 Sending SMS confirmation:', args);
+
+    // Determine the phone number to use
+    // If AI passed a placeholder like "on file", use the session's phone number
+    let phoneToUse = args.phone_number;
+    const placeholderPhrases = ['on file', 'current', 'same', 'this number', 'their number', 'member'];
+    const isPlaceholder = !phoneToUse || placeholderPhrases.some(phrase =>
+      phoneToUse?.toLowerCase().includes(phrase)
+    );
+
+    if (isPlaceholder) {
+      if (this.phoneNumber) {
+        console.log(`📱 Using session phone number instead of placeholder: ${this.phoneNumber}`);
+        phoneToUse = this.phoneNumber;
+      } else {
+        return { sent: false, error: 'No phone number available. Please provide a valid phone number.' };
+      }
+    }
+
+    if (!args.appointment_details) {
+      return { sent: false, error: 'Appointment details are required for the SMS.' };
+    }
+
     return await this.notificationService!.sendConfirmationSMS({
-      phone_number: args.phone_number,
+      phone_number: phoneToUse,
       appointment_details: args.appointment_details
     });
   }
@@ -1231,6 +1457,132 @@ export class OpenAIProvider implements IVoiceProvider {
   private async handleGetAppointmentPreparation(args: any): Promise<any> {
     console.log('📋 Getting appointment preparation info');
     return await this.clinicService!.getAppointmentPreparation();
+  }
+
+  // ============================================================================
+  // NEMT (Non-Emergency Medical Transportation) HANDLERS
+  // ============================================================================
+
+  /**
+   * Handle verify_member function call
+   */
+  private handleVerifyMember(args: {
+    member_id: string;
+    first_name: string;
+    last_name: string;
+    date_of_birth: string;
+  }): any {
+    console.log('🔐 Verifying member:', args);
+    return NEMTService.verifyMember(args);
+  }
+
+  /**
+   * Handle get_member_info function call
+   */
+  private handleGetMemberInfo(args: { member_id: string }): any {
+    console.log('👤 Getting member info:', args);
+    return NEMTService.getMemberInfo(args);
+  }
+
+  /**
+   * Handle check_ride_eligibility function call
+   */
+  private handleCheckRideEligibility(args: { member_id: string }): any {
+    console.log('✅ Checking ride eligibility:', args);
+    return NEMTService.checkRideEligibility(args);
+  }
+
+  /**
+   * Handle search_address function call
+   */
+  private handleSearchAddress(args: { query: string; city?: string; state?: string }): any {
+    console.log('📍 Searching address:', args);
+    return NEMTService.searchAddress(args);
+  }
+
+  /**
+   * Handle book_ride function call
+   */
+  private handleBookRide(args: {
+    member_id: string;
+    trip_type: 'one_way' | 'round_trip';
+    pickup_address: string;
+    pickup_city: string;
+    pickup_state: string;
+    pickup_zip: string;
+    dropoff_address: string;
+    dropoff_city: string;
+    dropoff_state: string;
+    dropoff_zip: string;
+    pickup_date: string;
+    pickup_time: string;
+    appointment_time: string;
+    assistance_type: string;
+    facility_name?: string;
+    return_trip_type?: 'scheduled' | 'will_call';
+    return_pickup_time?: string;
+    notes?: string;
+  }): any {
+    console.log('🚗 Booking ride:', args);
+    return NEMTService.bookRide(args);
+  }
+
+  /**
+   * Handle get_ride_status function call
+   */
+  private handleGetRideStatus(args: { confirmation_number: string }): any {
+    console.log('📊 Getting ride status:', args);
+    return NEMTService.getRideStatus(args);
+  }
+
+  /**
+   * Handle cancel_ride function call
+   */
+  private handleCancelRide(args: { confirmation_number: string; reason?: string }): any {
+    console.log('❌ Cancelling ride:', args);
+    return NEMTService.cancelRide(args);
+  }
+
+  /**
+   * Handle update_ride function call
+   */
+  private handleUpdateRide(args: {
+    confirmation_number: string;
+    pickup_time?: string;
+    pickup_date?: string;
+    appointment_time?: string;
+    return_trip_type?: 'scheduled' | 'will_call';
+    return_pickup_time?: string;
+    notes?: string;
+  }): any {
+    console.log('✏️  Updating ride:', args);
+    return NEMTService.updateRide(args);
+  }
+
+  /**
+   * Handle add_companion function call
+   */
+  private handleAddCompanion(args: {
+    confirmation_number: string;
+    companion_name: string;
+    companion_phone: string;
+    relationship?: string;
+  }): any {
+    console.log('👥 Adding companion:', args);
+    return NEMTService.addCompanion(args);
+  }
+
+  /**
+   * Handle check_nemt_availability function call
+   */
+  private handleCheckNEMTAvailability(args: {
+    date: string;
+    time: string;
+    pickup_zip: string;
+    assistance_type: string;
+  }): any {
+    console.log('🚐 Checking NEMT availability:', args);
+    return NEMTService.checkAvailability(args);
   }
 
   // Browser-compatible base64 conversion

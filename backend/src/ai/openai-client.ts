@@ -1,12 +1,13 @@
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
-import { IVoiceProvider, ProviderConfig, VoiceProviderCallbacks, ProviderMessage } from '../types';
+import { IVoiceProvider, ProviderConfig, VoiceProviderCallbacks, ProviderMessage, ToolConfigLite } from '../types';
 import type { DatabaseAdapter } from '../database/db-interface';
 import { ConversationLogger } from '../services/conversation-logger';
 import { AppointmentService } from '../services/appointment-service';
 import { CRMService } from '../services/crm-service';
 import { NotificationService } from '../services/notification-service';
 import { ClinicService } from '../services/clinic-service';
+import { NEMTService } from '../services/nemt-service';
 import { config } from '../config';
 import { ToolRegistry } from '../lib/tool-registry';
 import { ScheduleAppointmentSkill } from '../skills/scheduling';
@@ -177,6 +178,60 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
       'Get appointment preparation info'
     );
 
+    // ============================================================================
+    // NEMT (Non-Emergency Medical Transportation) TOOLS
+    // ============================================================================
+
+    this.toolRegistry.register('verify_member',
+      async (args) => this.handleVerifyMember(args),
+      'Verify member identity'
+    );
+
+    this.toolRegistry.register('get_member_info',
+      async (args) => this.handleGetMemberInfo(args),
+      'Get member information'
+    );
+
+    this.toolRegistry.register('check_ride_eligibility',
+      async (args) => this.handleCheckRideEligibility(args),
+      'Check ride eligibility'
+    );
+
+    this.toolRegistry.register('search_address',
+      async (args) => this.handleSearchAddress(args),
+      'Search and validate address'
+    );
+
+    this.toolRegistry.register('book_ride',
+      async (args) => this.handleBookRide(args),
+      'Book a ride'
+    );
+
+    this.toolRegistry.register('get_ride_status',
+      async (args) => this.handleGetRideStatus(args),
+      'Get ride status'
+    );
+
+    this.toolRegistry.register('cancel_ride',
+      async (args) => this.handleCancelRide(args),
+      'Cancel a ride'
+    );
+
+    this.toolRegistry.register('update_ride',
+      async (args) => this.handleUpdateRide(args),
+      'Update ride details'
+    );
+
+    this.toolRegistry.register('add_companion',
+      async (args) => this.handleAddCompanion(args),
+      'Add companion to ride'
+    );
+
+    this.toolRegistry.register('check_nemt_availability',
+      async (args) => this.handleCheckNEMTAvailability(args),
+      'Check NEMT vehicle availability'
+    );
+
     this.toolRegistry.printStatus();
   }
 
@@ -226,13 +281,395 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
     });
   }
 
+  /**
+   * Build tools array based on demo config
+   * Dynamically selects dental or NEMT tools based on toolConfigs
+   */
+  private buildToolsArray(config: ProviderConfig): any[] {
+    // Check if this is an NEMT demo by looking at toolConfigs
+    const hasNEMTTools = config.toolConfigs?.some(tc =>
+      tc.toolName.includes('verify_member') ||
+      tc.toolName.includes('book_ride') ||
+      tc.toolName.includes('nemt')
+    );
+
+    // Always include the conversation start logger
+    const baseTools = [
+      {
+        type: 'function',
+        name: 'log_conversation_start',
+        description: 'MANDATORY: Call this function immediately when the conversation begins to log the call start.',
+        parameters: {
+          type: 'object',
+          properties: {
+            greeting_confirmed: { type: 'boolean', description: 'Confirm you are ready to begin the conversation' },
+            test_message: { type: 'string', description: 'Optional test message for verification' }
+          },
+          required: ['greeting_confirmed']
+        }
+      }
+    ];
+
+    if (hasNEMTTools) {
+      console.log('🚗 NEMT demo detected - loading NEMT tools');
+      return [...baseTools, ...this.getNEMTToolDefinitions()];
+    } else {
+      console.log('🦷 Dental demo detected - loading dental tools');
+      return [...baseTools, ...this.getDentalToolDefinitions()];
+    }
+  }
+
+  /**
+   * Get NEMT (Non-Emergency Medical Transportation) tool definitions
+   */
+  private getNEMTToolDefinitions(): any[] {
+    return [
+      {
+        type: 'function',
+        name: 'verify_member',
+        description: 'Verify member identity using Member ID, name, and date of birth. MANDATORY before accessing any account information.',
+        parameters: {
+          type: 'object',
+          properties: {
+            member_id: { type: 'string', description: 'Member ID number (from Medicaid/Medicare card)' },
+            first_name: { type: 'string', description: 'Member first name' },
+            last_name: { type: 'string', description: 'Member last name' },
+            date_of_birth: { type: 'string', description: 'Date of birth (YYYY-MM-DD format)' }
+          },
+          required: ['member_id', 'first_name', 'last_name', 'date_of_birth']
+        }
+      },
+      {
+        type: 'function',
+        name: 'get_member_info',
+        description: 'Get full member information including address, plan type, and ride history',
+        parameters: {
+          type: 'object',
+          properties: {
+            member_id: { type: 'string', description: 'Member ID number' }
+          },
+          required: ['member_id']
+        }
+      },
+      {
+        type: 'function',
+        name: 'check_ride_eligibility',
+        description: 'Check if member is eligible for rides and how many rides remain',
+        parameters: {
+          type: 'object',
+          properties: {
+            member_id: { type: 'string', description: 'Member ID number' }
+          },
+          required: ['member_id']
+        }
+      },
+      {
+        type: 'function',
+        name: 'search_address',
+        description: 'Search and validate an address for pickup or dropoff',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Address search query' },
+            city: { type: 'string', description: 'City name' },
+            state: { type: 'string', description: 'State abbreviation' }
+          },
+          required: ['query']
+        }
+      },
+      {
+        type: 'function',
+        name: 'book_ride',
+        description: 'Book a ride for the member. Collect all required info first.',
+        parameters: {
+          type: 'object',
+          properties: {
+            member_id: { type: 'string', description: 'Member ID' },
+            trip_type: { type: 'string', enum: ['one_way', 'round_trip'], description: 'Type of trip' },
+            pickup_address: { type: 'string', description: 'Pickup street address' },
+            pickup_city: { type: 'string', description: 'Pickup city' },
+            pickup_state: { type: 'string', description: 'Pickup state' },
+            pickup_zip: { type: 'string', description: 'Pickup ZIP code' },
+            dropoff_address: { type: 'string', description: 'Dropoff street address' },
+            dropoff_city: { type: 'string', description: 'Dropoff city' },
+            dropoff_state: { type: 'string', description: 'Dropoff state' },
+            dropoff_zip: { type: 'string', description: 'Dropoff ZIP code' },
+            pickup_date: { type: 'string', description: 'Pickup date (YYYY-MM-DD)' },
+            pickup_time: { type: 'string', description: 'Pickup time (HH:MM)' },
+            appointment_time: { type: 'string', description: 'Appointment time (HH:MM)' },
+            assistance_type: { type: 'string', enum: ['ambulatory', 'wheelchair', 'wheelchair_xl', 'stretcher'], description: 'Mobility assistance type' },
+            facility_name: { type: 'string', description: 'Medical facility name' },
+            return_trip_type: { type: 'string', enum: ['scheduled', 'will_call'], description: 'Return trip type' },
+            return_pickup_time: { type: 'string', description: 'Scheduled return pickup time (HH:MM)' },
+            notes: { type: 'string', description: 'Special notes or instructions' }
+          },
+          required: ['member_id', 'trip_type', 'pickup_address', 'pickup_city', 'pickup_state', 'pickup_zip',
+                     'dropoff_address', 'dropoff_city', 'dropoff_state', 'dropoff_zip',
+                     'pickup_date', 'pickup_time', 'appointment_time', 'assistance_type']
+        }
+      },
+      {
+        type: 'function',
+        name: 'get_ride_status',
+        description: 'Get status of a scheduled ride using confirmation number',
+        parameters: {
+          type: 'object',
+          properties: {
+            confirmation_number: { type: 'string', description: 'Ride confirmation number' }
+          },
+          required: ['confirmation_number']
+        }
+      },
+      {
+        type: 'function',
+        name: 'cancel_ride',
+        description: 'Cancel a scheduled ride',
+        parameters: {
+          type: 'object',
+          properties: {
+            confirmation_number: { type: 'string', description: 'Ride confirmation number' },
+            reason: { type: 'string', description: 'Reason for cancellation' }
+          },
+          required: ['confirmation_number']
+        }
+      },
+      {
+        type: 'function',
+        name: 'update_ride',
+        description: 'Update ride details like pickup time or return trip',
+        parameters: {
+          type: 'object',
+          properties: {
+            confirmation_number: { type: 'string', description: 'Ride confirmation number' },
+            pickup_time: { type: 'string', description: 'New pickup time (HH:MM)' },
+            pickup_date: { type: 'string', description: 'New pickup date (YYYY-MM-DD)' },
+            appointment_time: { type: 'string', description: 'New appointment time' },
+            return_trip_type: { type: 'string', enum: ['scheduled', 'will_call'], description: 'Return trip type' },
+            return_pickup_time: { type: 'string', description: 'Scheduled return time' },
+            notes: { type: 'string', description: 'Updated notes' }
+          },
+          required: ['confirmation_number']
+        }
+      },
+      {
+        type: 'function',
+        name: 'add_companion',
+        description: 'Add a companion to an existing ride reservation',
+        parameters: {
+          type: 'object',
+          properties: {
+            confirmation_number: { type: 'string', description: 'Ride confirmation number' },
+            companion_name: { type: 'string', description: 'Companion full name' },
+            companion_phone: { type: 'string', description: 'Companion phone number' },
+            relationship: { type: 'string', description: 'Relationship to member' }
+          },
+          required: ['confirmation_number', 'companion_name', 'companion_phone']
+        }
+      },
+      {
+        type: 'function',
+        name: 'check_nemt_availability',
+        description: 'Check vehicle availability for a specific date/time and assistance type',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: { type: 'string', description: 'Date to check (YYYY-MM-DD)' },
+            time: { type: 'string', description: 'Time to check (HH:MM)' },
+            pickup_zip: { type: 'string', description: 'Pickup ZIP code' },
+            assistance_type: { type: 'string', enum: ['ambulatory', 'wheelchair', 'wheelchair_xl', 'stretcher'], description: 'Mobility assistance type' }
+          },
+          required: ['date', 'time', 'pickup_zip', 'assistance_type']
+        }
+      }
+    ];
+  }
+
+  /**
+   * Get Dental tool definitions (original hardcoded tools)
+   */
+  private getDentalToolDefinitions(): any[] {
+    return [
+      {
+        type: 'function',
+        name: 'check_availability',
+        description: 'Check available appointment slots for a specific date and time range.',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: { type: 'string', description: 'The date to check availability (YYYY-MM-DD format)' },
+            time_range: { type: 'string', enum: ['morning', 'afternoon', 'evening'], description: 'Preferred time of day' },
+            num_children: { type: 'integer', description: 'Number of children to schedule', minimum: 1 }
+          },
+          required: ['date', 'time_range', 'num_children']
+        }
+      },
+      {
+        type: 'function',
+        name: 'book_appointment',
+        description: 'Book a dental appointment for specified children. Only call after user confirms.',
+        parameters: {
+          type: 'object',
+          properties: {
+            child_names: { type: 'array', items: { type: 'string' }, description: 'Names of children to schedule' },
+            appointment_time: { type: 'string', description: 'ISO 8601 datetime for appointment' },
+            appointment_type: { type: 'string', enum: ['exam', 'cleaning', 'exam_and_cleaning', 'emergency'] }
+          },
+          required: ['child_names', 'appointment_time', 'appointment_type']
+        }
+      },
+      {
+        type: 'function',
+        name: 'get_patient_info',
+        description: 'Retrieve patient information from CRM by phone number',
+        parameters: {
+          type: 'object',
+          properties: {
+            phone_number: { type: 'string', description: 'Patient phone number' }
+          },
+          required: ['phone_number']
+        }
+      },
+      {
+        type: 'function',
+        name: 'send_confirmation_sms',
+        description: 'Send SMS confirmation ONLY after obtaining explicit verbal consent.',
+        parameters: {
+          type: 'object',
+          properties: {
+            phone_number: { type: 'string', description: 'Recipient phone number' },
+            appointment_details: { type: 'string', description: 'Appointment details for SMS' }
+          },
+          required: ['phone_number', 'appointment_details']
+        }
+      },
+      {
+        type: 'function',
+        name: 'reschedule_appointment',
+        description: 'Reschedule an existing appointment to a new time',
+        parameters: {
+          type: 'object',
+          properties: {
+            booking_id: { type: 'string', description: 'The booking ID of the appointment to reschedule' },
+            new_appointment_time: { type: 'string', description: 'New ISO 8601 datetime for the appointment' },
+            reason: { type: 'string', description: 'Optional reason for rescheduling' }
+          },
+          required: ['booking_id', 'new_appointment_time']
+        }
+      },
+      {
+        type: 'function',
+        name: 'cancel_appointment',
+        description: 'Cancel an existing appointment',
+        parameters: {
+          type: 'object',
+          properties: {
+            booking_id: { type: 'string', description: 'The booking ID of the appointment to cancel' },
+            reason: { type: 'string', description: 'Reason for cancellation' }
+          },
+          required: ['booking_id', 'reason']
+        }
+      },
+      {
+        type: 'function',
+        name: 'get_appointment_history',
+        description: 'Get appointment history for the current patient',
+        parameters: { type: 'object', properties: {}, required: [] }
+      },
+      {
+        type: 'function',
+        name: 'add_appointment_notes',
+        description: 'Add notes to an existing appointment',
+        parameters: {
+          type: 'object',
+          properties: {
+            booking_id: { type: 'string', description: 'The booking ID' },
+            notes: { type: 'string', description: 'Notes to add' }
+          },
+          required: ['booking_id', 'notes']
+        }
+      },
+      {
+        type: 'function',
+        name: 'send_appointment_reminder',
+        description: 'Send an SMS reminder for an upcoming appointment',
+        parameters: {
+          type: 'object',
+          properties: {
+            phone_number: { type: 'string', description: 'Recipient phone number' },
+            patient_name: { type: 'string', description: 'Parent/guardian name' },
+            child_name: { type: 'string', description: 'Child name' },
+            appointment_time: { type: 'string', description: 'ISO 8601 datetime' },
+            location: { type: 'string', description: 'Clinic location' }
+          },
+          required: ['phone_number', 'patient_name', 'child_name', 'appointment_time', 'location']
+        }
+      },
+      {
+        type: 'function',
+        name: 'check_insurance_eligibility',
+        description: 'Verify Medicaid insurance eligibility for a child',
+        parameters: {
+          type: 'object',
+          properties: {
+            medicaid_id: { type: 'string', description: 'Child Medicaid ID number' },
+            child_name: { type: 'string', description: 'Child name' },
+            date_of_birth: { type: 'string', description: 'Child date of birth (YYYY-MM-DD)' }
+          },
+          required: ['medicaid_id', 'child_name']
+        }
+      },
+      {
+        type: 'function',
+        name: 'get_clinic_hours',
+        description: 'Get clinic operating hours',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: { type: 'string', description: 'Optional specific date to check (YYYY-MM-DD)' }
+          },
+          required: []
+        }
+      },
+      {
+        type: 'function',
+        name: 'get_directions',
+        description: 'Get directions and address information for the clinic',
+        parameters: {
+          type: 'object',
+          properties: {
+            from_address: { type: 'string', description: 'Optional starting address' }
+          },
+          required: []
+        }
+      },
+      {
+        type: 'function',
+        name: 'get_available_services',
+        description: 'Get list of available dental services',
+        parameters: { type: 'object', properties: {}, required: [] }
+      },
+      {
+        type: 'function',
+        name: 'get_appointment_preparation',
+        description: 'Get information about what to bring and how to prepare',
+        parameters: { type: 'object', properties: {}, required: [] }
+      }
+    ];
+  }
+
   private sendSessionUpdate(config: ProviderConfig): void {
     if (!this.ws) return;
 
     console.log('🔍 DEBUG - sendSessionUpdate called');
     console.log('🔍 DEBUG - appointmentService exists:', !!this.appointmentService);
     console.log('🔍 DEBUG - crmService exists:', !!this.crmService);
-    console.log('🔍 DEBUG - Will send tools:', !!(this.appointmentService && this.crmService));
+    console.log('🔍 DEBUG - toolConfigs provided:', config.toolConfigs?.length || 0);
+    console.log('🔍 DEBUG - demoSlug:', config.demoSlug || 'none');
+
+    // Build tools dynamically based on demo config
+    const tools = this.appointmentService && this.crmService
+      ? this.buildToolsArray(config)
+      : [];
 
     const sessionConfig = {
       type: 'session.update',
@@ -251,289 +688,9 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
         temperature: 0.8,
         max_response_output_tokens: 4096,
 
-        // Function/tool definitions (only if database adapter is available)
-        ...(this.appointmentService && this.crmService ? {
-          tools: [
-            {
-              type: 'function',
-              name: 'log_conversation_start',
-              description: 'MANDATORY: Call this function immediately when the conversation begins to log the call start. This confirms the AI agent is active and skill logging is working.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  greeting_confirmed: {
-                    type: 'boolean',
-                    description: 'Confirm you are ready to begin the conversation'
-                  },
-                  test_message: {
-                    type: 'string',
-                    description: 'Optional test message for verification'
-                  }
-                },
-                required: ['greeting_confirmed']
-              }
-            },
-            // REMOVED: schedule_appointment skill - bypasses SMS consent protocol
-            // Use individual functions (check_availability, book_appointment, send_confirmation_sms) instead
-            {
-              type: 'function',
-              name: 'check_availability',
-              description: 'Check available appointment slots for a specific date and time range. Use when the user asks about available times.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  date: {
-                    type: 'string',
-                    description: 'The date to check availability (YYYY-MM-DD format)',
-                  },
-                  time_range: {
-                    type: 'string',
-                    enum: ['morning', 'afternoon', 'evening'],
-                    description: 'Preferred time of day'
-                  },
-                  num_children: {
-                    type: 'integer',
-                    description: 'Number of children to schedule',
-                    minimum: 1
-                  }
-                },
-                required: ['date', 'time_range', 'num_children']
-              }
-            },
-            {
-              type: 'function',
-              name: 'book_appointment',
-              description: 'Book a dental appointment for specified children. Only call after user confirms.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  child_names: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    description: 'Names of children to schedule'
-                  },
-                  appointment_time: {
-                    type: 'string',
-                    description: 'ISO 8601 datetime for appointment'
-                  },
-                  appointment_type: {
-                    type: 'string',
-                    enum: ['exam', 'cleaning', 'exam_and_cleaning', 'emergency']
-                  }
-                },
-                required: ['child_names', 'appointment_time', 'appointment_type']
-              }
-            },
-            {
-              type: 'function',
-              name: 'get_patient_info',
-              description: 'Retrieve patient information from CRM by phone number',
-              parameters: {
-                type: 'object',
-                properties: {
-                  phone_number: {
-                    type: 'string',
-                    description: 'Patient phone number'
-                  }
-                },
-                required: ['phone_number']
-              }
-            },
-            {
-              type: 'function',
-              name: 'send_confirmation_sms',
-              description: 'Send SMS confirmation ONLY after obtaining explicit verbal consent from the parent. CRITICAL: You MUST first ask "Would you like me to text you a confirmation with the appointment details?" and WAIT for them to say "yes", "sure", or similar affirmative response. NEVER call this function automatically or without clear permission. If they decline, do NOT send SMS - just confirm verbally instead.',
-              parameters: {
-                type: 'object',
-                properties: {
-                  phone_number: {
-                    type: 'string',
-                    description: 'Recipient phone number'
-                  },
-                  appointment_details: {
-                    type: 'string',
-                    description: 'Appointment details for SMS'
-                  }
-                },
-                required: ['phone_number', 'appointment_details']
-              }
-            },
-            {
-              type: 'function',
-              name: 'reschedule_appointment',
-              description: 'Reschedule an existing appointment to a new time',
-              parameters: {
-                type: 'object',
-                properties: {
-                  booking_id: {
-                    type: 'string',
-                    description: 'The booking ID of the appointment to reschedule'
-                  },
-                  new_appointment_time: {
-                    type: 'string',
-                    description: 'New ISO 8601 datetime for the appointment'
-                  },
-                  reason: {
-                    type: 'string',
-                    description: 'Optional reason for rescheduling'
-                  }
-                },
-                required: ['booking_id', 'new_appointment_time']
-              }
-            },
-            {
-              type: 'function',
-              name: 'cancel_appointment',
-              description: 'Cancel an existing appointment',
-              parameters: {
-                type: 'object',
-                properties: {
-                  booking_id: {
-                    type: 'string',
-                    description: 'The booking ID of the appointment to cancel'
-                  },
-                  reason: {
-                    type: 'string',
-                    description: 'Reason for cancellation'
-                  }
-                },
-                required: ['booking_id', 'reason']
-              }
-            },
-            {
-              type: 'function',
-              name: 'get_appointment_history',
-              description: 'Get appointment history for the current patient',
-              parameters: {
-                type: 'object',
-                properties: {},
-                required: []
-              }
-            },
-            {
-              type: 'function',
-              name: 'add_appointment_notes',
-              description: 'Add notes to an existing appointment (e.g., special needs, preferences)',
-              parameters: {
-                type: 'object',
-                properties: {
-                  booking_id: {
-                    type: 'string',
-                    description: 'The booking ID of the appointment'
-                  },
-                  notes: {
-                    type: 'string',
-                    description: 'Notes to add to the appointment'
-                  }
-                },
-                required: ['booking_id', 'notes']
-              }
-            },
-            {
-              type: 'function',
-              name: 'send_appointment_reminder',
-              description: 'Send an SMS reminder for an upcoming appointment',
-              parameters: {
-                type: 'object',
-                properties: {
-                  phone_number: {
-                    type: 'string',
-                    description: 'Recipient phone number'
-                  },
-                  patient_name: {
-                    type: 'string',
-                    description: 'Parent/guardian name'
-                  },
-                  child_name: {
-                    type: 'string',
-                    description: 'Child name'
-                  },
-                  appointment_time: {
-                    type: 'string',
-                    description: 'ISO 8601 datetime of appointment'
-                  },
-                  location: {
-                    type: 'string',
-                    description: 'Clinic location'
-                  }
-                },
-                required: ['phone_number', 'patient_name', 'child_name', 'appointment_time', 'location']
-              }
-            },
-            {
-              type: 'function',
-              name: 'check_insurance_eligibility',
-              description: 'Verify Medicaid insurance eligibility for a child',
-              parameters: {
-                type: 'object',
-                properties: {
-                  medicaid_id: {
-                    type: 'string',
-                    description: 'Child Medicaid ID number'
-                  },
-                  child_name: {
-                    type: 'string',
-                    description: 'Child name'
-                  },
-                  date_of_birth: {
-                    type: 'string',
-                    description: 'Child date of birth (YYYY-MM-DD)'
-                  }
-                },
-                required: ['medicaid_id', 'child_name']
-              }
-            },
-            {
-              type: 'function',
-              name: 'get_clinic_hours',
-              description: 'Get clinic operating hours',
-              parameters: {
-                type: 'object',
-                properties: {
-                  date: {
-                    type: 'string',
-                    description: 'Optional specific date to check (YYYY-MM-DD)'
-                  }
-                },
-                required: []
-              }
-            },
-            {
-              type: 'function',
-              name: 'get_directions',
-              description: 'Get directions and address information for the clinic',
-              parameters: {
-                type: 'object',
-                properties: {
-                  from_address: {
-                    type: 'string',
-                    description: 'Optional starting address for directions'
-                  }
-                },
-                required: []
-              }
-            },
-            {
-              type: 'function',
-              name: 'get_available_services',
-              description: 'Get list of available dental services and their coverage status',
-              parameters: {
-                type: 'object',
-                properties: {},
-                required: []
-              }
-            },
-            {
-              type: 'function',
-              name: 'get_appointment_preparation',
-              description: 'Get information about what to bring and how to prepare for an appointment',
-              parameters: {
-                type: 'object',
-                properties: {},
-                required: []
-              }
-            }
-          ],
+        // Dynamic tool definitions based on demo config
+        ...(tools.length > 0 ? {
+          tools: tools,
           tool_choice: 'auto'
         } : {})
       }
@@ -1000,6 +1157,37 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
         case 'get_appointment_preparation':
           result = await this.handleGetAppointmentPreparation(args);
           break;
+        // NEMT (Non-Emergency Medical Transportation) tools
+        case 'verify_member':
+          result = await this.handleVerifyMember(args);
+          break;
+        case 'get_member_info':
+          result = await this.handleGetMemberInfo(args);
+          break;
+        case 'check_ride_eligibility':
+          result = await this.handleCheckRideEligibility(args);
+          break;
+        case 'search_address':
+          result = await this.handleSearchAddress(args);
+          break;
+        case 'book_ride':
+          result = await this.handleBookRide(args);
+          break;
+        case 'get_ride_status':
+          result = await this.handleGetRideStatus(args);
+          break;
+        case 'cancel_ride':
+          result = await this.handleCancelRide(args);
+          break;
+        case 'update_ride':
+          result = await this.handleUpdateRide(args);
+          break;
+        case 'add_companion':
+          result = await this.handleAddCompanion(args);
+          break;
+        case 'check_nemt_availability':
+          result = await this.handleCheckNEMTAvailability(args);
+          break;
         default:
           throw new Error(`Unknown function: ${name}`);
       }
@@ -1192,12 +1380,22 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
    * Handle check_availability function call
    */
   private async handleCheckAvailability(args: {
-    date: string;
-    time_range: string;
-    num_children: number;
+    date?: string;
+    time_range?: string;
+    num_children?: number;
   }): Promise<any> {
     console.log('📅 Checking availability:', args);
-    return await this.appointmentService!.checkAvailability(args);
+    if (!args.date || !args.time_range || !args.num_children) {
+      return {
+        available: false,
+        error: 'Date, time range, and number of children are required to check availability.'
+      };
+    }
+    return await this.appointmentService!.checkAvailability({
+      date: args.date,
+      time_range: args.time_range,
+      num_children: args.num_children
+    });
   }
 
   /**
@@ -1222,12 +1420,25 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
    * Handle book_appointment function call
    */
   private async handleBookAppointment(args: {
-    child_names: string[];
-    appointment_time: string;
-    appointment_type: string;
+    child_names?: string[];
+    appointment_time?: string;
+    appointment_type?: string;
   }): Promise<any> {
     console.log('📝 Booking appointment:', args);
-    const result = await this.appointmentService!.bookAppointment(args);
+    if (!args.child_names || !Array.isArray(args.child_names) || args.child_names.length === 0) {
+      return { status: 'error', error: 'Child names are required. Please provide the names of the children to schedule.' };
+    }
+    if (!args.appointment_time) {
+      return { status: 'error', error: 'Appointment time is required.' };
+    }
+    if (!args.appointment_type) {
+      return { status: 'error', error: 'Appointment type is required (exam, cleaning, exam_and_cleaning, or emergency).' };
+    }
+    const result = await this.appointmentService!.bookAppointment({
+      child_names: args.child_names,
+      appointment_time: args.appointment_time,
+      appointment_type: args.appointment_type
+    });
 
     // Update conversation outcome if booking succeeded
     if (this.conversationLogger && this.conversationId && result.status === 'confirmed') {
@@ -1281,9 +1492,12 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
    * Handle get_patient_info function call
    */
   private async handleGetPatientInfo(args: {
-    phone_number: string;
+    phone_number?: string;
   }): Promise<any> {
     console.log('👤 Getting patient info:', args);
+    if (!args.phone_number) {
+      return { found: false, error: 'Phone number is required to look up patient information.' };
+    }
     return await this.crmService!.getPatientInfo(args.phone_number);
   }
 
@@ -1291,13 +1505,35 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
    * Handle send_confirmation_sms function call
    */
   private async handleSendConfirmationSMS(args: {
-    phone_number: string;
-    appointment_details: string;
+    phone_number?: string;
+    appointment_details?: string;
   }): Promise<any> {
     console.log('📱 Sending SMS confirmation:', args);
+
+    // Determine the phone number to use
+    // If AI passed a placeholder like "on file", use the call's phone number
+    let phoneToUse = args.phone_number;
+    const placeholderPhrases = ['on file', 'current', 'same', 'this number', 'their number', 'member'];
+    const isPlaceholder = !phoneToUse || placeholderPhrases.some(phrase =>
+      phoneToUse?.toLowerCase().includes(phrase)
+    );
+
+    if (isPlaceholder) {
+      if (this.phoneNumber) {
+        console.log(`📱 Using call phone number instead of placeholder: ${this.phoneNumber}`);
+        phoneToUse = this.phoneNumber;
+      } else {
+        return { sent: false, error: 'No phone number available. Please provide a valid phone number.' };
+      }
+    }
+
+    if (!args.appointment_details) {
+      return { sent: false, error: 'Appointment details are required for the SMS.' };
+    }
+
     return await this.notificationService!.sendConfirmationSMS({
-      phone_number: args.phone_number,
-      appointment_details: args.appointment_details
+      phone_number: phoneToUse!,
+      appointment_details: args.appointment_details!
     });
   }
 
@@ -1305,22 +1541,38 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
    * Handle reschedule_appointment function call
    */
   private async handleRescheduleAppointment(args: {
-    booking_id: string;
-    new_appointment_time: string;
+    booking_id?: string;
+    new_appointment_time?: string;
     reason?: string;
   }): Promise<any> {
     console.log('🔄 Rescheduling appointment:', args);
-    return await this.appointmentService!.rescheduleAppointment(args);
+    if (!args.booking_id) {
+      return { success: false, error: 'Booking ID is required to reschedule the appointment.' };
+    }
+    if (!args.new_appointment_time) {
+      return { success: false, error: 'New appointment time is required.' };
+    }
+    return await this.appointmentService!.rescheduleAppointment({
+      booking_id: args.booking_id,
+      new_appointment_time: args.new_appointment_time,
+      reason: args.reason
+    });
   }
 
   /**
    * Handle cancel_appointment function call
    */
   private async handleCancelAppointment(args: {
-    booking_id: string;
-    reason: string;
+    booking_id?: string;
+    reason?: string;
   }): Promise<any> {
     console.log('❌ Cancelling appointment:', args);
+    if (!args.booking_id) {
+      return { success: false, error: 'Booking ID is required to cancel the appointment.' };
+    }
+    if (!args.reason) {
+      return { success: false, error: 'A reason is required for cancellation.' };
+    }
     await this.appointmentService!.cancelAppointment(args.booking_id, args.reason);
     return { success: true, message: 'Appointment cancelled successfully' };
   }
@@ -1340,37 +1592,71 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
    * Handle add_appointment_notes function call
    */
   private async handleAddAppointmentNotes(args: {
-    booking_id: string;
-    notes: string;
+    booking_id?: string;
+    notes?: string;
   }): Promise<any> {
     console.log('📝 Adding appointment notes:', args);
-    return await this.appointmentService!.addAppointmentNotes(args);
+    if (!args.booking_id) {
+      return { success: false, error: 'Booking ID is required.' };
+    }
+    if (!args.notes) {
+      return { success: false, error: 'Notes content is required.' };
+    }
+    return await this.appointmentService!.addAppointmentNotes({
+      booking_id: args.booking_id,
+      notes: args.notes
+    });
   }
 
   /**
    * Handle send_appointment_reminder function call
    */
   private async handleSendAppointmentReminder(args: {
-    phone_number: string;
-    patient_name: string;
-    child_name: string;
-    appointment_time: string;
-    location: string;
+    phone_number?: string;
+    patient_name?: string;
+    child_name?: string;
+    appointment_time?: string;
+    location?: string;
   }): Promise<any> {
     console.log('⏰ Sending appointment reminder:', args);
-    return await this.notificationService!.sendAppointmentReminder(args);
+    const missing = [];
+    if (!args.phone_number) missing.push('phone_number');
+    if (!args.patient_name) missing.push('patient_name');
+    if (!args.child_name) missing.push('child_name');
+    if (!args.appointment_time) missing.push('appointment_time');
+    if (!args.location) missing.push('location');
+    if (missing.length > 0) {
+      return { sent: false, error: `Missing required fields: ${missing.join(', ')}` };
+    }
+    return await this.notificationService!.sendAppointmentReminder({
+      phone_number: args.phone_number!,
+      patient_name: args.patient_name!,
+      child_name: args.child_name!,
+      appointment_time: args.appointment_time!,
+      location: args.location!
+    });
   }
 
   /**
    * Handle check_insurance_eligibility function call
    */
   private async handleCheckInsuranceEligibility(args: {
-    medicaid_id: string;
-    child_name: string;
+    medicaid_id?: string;
+    child_name?: string;
     date_of_birth?: string;
   }): Promise<any> {
     console.log('🏥 Checking insurance eligibility:', args);
-    return await this.notificationService!.checkInsuranceEligibility(args);
+    if (!args.medicaid_id) {
+      return { eligible: false, error: 'Medicaid ID is required.' };
+    }
+    if (!args.child_name) {
+      return { eligible: false, error: 'Child name is required.' };
+    }
+    return await this.notificationService!.checkInsuranceEligibility({
+      medicaid_id: args.medicaid_id,
+      child_name: args.child_name,
+      date_of_birth: args.date_of_birth
+    });
   }
 
   /**
@@ -1403,6 +1689,145 @@ export class OpenAIClient extends EventEmitter implements IVoiceProvider {
   private async handleGetAppointmentPreparation(args: any): Promise<any> {
     console.log('📋 Getting appointment preparation info');
     return await this.clinicService!.getAppointmentPreparation();
+  }
+
+  // ============================================================================
+  // NEMT (Non-Emergency Medical Transportation) HANDLERS
+  // ============================================================================
+
+  private async handleVerifyMember(args: {
+    member_id?: string;
+    first_name?: string;
+    last_name?: string;
+    date_of_birth?: string;
+  }): Promise<any> {
+    console.log('🔐 Verifying member:', args.member_id);
+    if (!args.member_id || !args.first_name || !args.last_name || !args.date_of_birth) {
+      return {
+        verified: false,
+        error: 'Member ID, first name, last name, and date of birth are all required for verification.'
+      };
+    }
+    return NEMTService.verifyMember({
+      member_id: args.member_id,
+      first_name: args.first_name,
+      last_name: args.last_name,
+      date_of_birth: args.date_of_birth
+    });
+  }
+
+  private async handleGetMemberInfo(args: { member_id?: string }): Promise<any> {
+    console.log('👤 Getting member info:', args.member_id);
+    if (!args.member_id) {
+      return { error: 'Member ID is required.' };
+    }
+    return NEMTService.getMemberInfo({ member_id: args.member_id });
+  }
+
+  private async handleCheckRideEligibility(args: { member_id?: string }): Promise<any> {
+    console.log('✅ Checking ride eligibility:', args.member_id);
+    if (!args.member_id) {
+      return {
+        eligible: false,
+        remaining_rides: 0,
+        total_rides: 0,
+        rides_used: 0,
+        plan_type: 'unknown',
+        eligibility_status: 'unknown',
+        error: 'Member ID is required.'
+      };
+    }
+    return NEMTService.checkRideEligibility({ member_id: args.member_id });
+  }
+
+  private async handleSearchAddress(args: { query?: string; city?: string; state?: string }): Promise<any> {
+    console.log('🏠 Searching address:', args.query);
+    if (!args.query) {
+      return { found: false, suggestions: [], error: 'Address query is required.' };
+    }
+    return NEMTService.searchAddress({ query: args.query, city: args.city, state: args.state });
+  }
+
+  private async handleBookRide(args: any): Promise<any> {
+    console.log('🚗 Booking ride for member:', args.member_id);
+    // Validate required fields
+    const required = ['member_id', 'trip_type', 'pickup_address', 'pickup_city', 'pickup_state',
+                      'pickup_zip', 'dropoff_address', 'dropoff_city', 'dropoff_state', 'dropoff_zip',
+                      'pickup_date', 'pickup_time', 'appointment_time', 'assistance_type'];
+    const missing = required.filter(field => !args[field]);
+    if (missing.length > 0) {
+      return {
+        success: false,
+        error: `Missing required fields: ${missing.join(', ')}. Please collect all ride information before booking.`
+      };
+    }
+    return NEMTService.bookRide(args);
+  }
+
+  private async handleGetRideStatus(args: { confirmation_number?: string }): Promise<any> {
+    console.log('📍 Getting ride status:', args.confirmation_number);
+    if (!args.confirmation_number) {
+      return {
+        found: false,
+        error: 'Confirmation number is required. Please ask the member for their ride confirmation number.'
+      };
+    }
+    return NEMTService.getRideStatus({ confirmation_number: args.confirmation_number });
+  }
+
+  private async handleCancelRide(args: { confirmation_number?: string; reason?: string }): Promise<any> {
+    console.log('❌ Cancelling ride:', args.confirmation_number);
+    if (!args.confirmation_number) {
+      return { success: false, error: 'Confirmation number is required.' };
+    }
+    return NEMTService.cancelRide({ confirmation_number: args.confirmation_number, reason: args.reason });
+  }
+
+  private async handleUpdateRide(args: any): Promise<any> {
+    console.log('✏️ Updating ride:', args.confirmation_number);
+    if (!args.confirmation_number) {
+      return { success: false, error: 'Confirmation number is required.' };
+    }
+    return NEMTService.updateRide(args);
+  }
+
+  private async handleAddCompanion(args: {
+    confirmation_number?: string;
+    companion_name?: string;
+    companion_phone?: string;
+    relationship?: string;
+  }): Promise<any> {
+    console.log('👥 Adding companion to ride:', args.confirmation_number);
+    if (!args.confirmation_number || !args.companion_name || !args.companion_phone) {
+      return { success: false, error: 'Confirmation number, companion name, and phone are required.' };
+    }
+    return NEMTService.addCompanion({
+      confirmation_number: args.confirmation_number,
+      companion_name: args.companion_name,
+      companion_phone: args.companion_phone,
+      relationship: args.relationship
+    });
+  }
+
+  private async handleCheckNEMTAvailability(args: {
+    date?: string;
+    time?: string;
+    pickup_zip?: string;
+    assistance_type?: string;
+  }): Promise<any> {
+    console.log('📅 Checking NEMT availability:', args.date, args.time);
+    if (!args.date || !args.time || !args.pickup_zip || !args.assistance_type) {
+      return {
+        available: false,
+        error: 'Date, time, pickup ZIP code, and assistance type are all required to check availability.'
+      };
+    }
+    return NEMTService.checkAvailability({
+      date: args.date,
+      time: args.time,
+      pickup_zip: args.pickup_zip,
+      assistance_type: args.assistance_type
+    });
   }
 
   // Node.js-compatible base64 conversion (using Buffer instead of atob/btoa)

@@ -225,3 +225,50 @@ To add support for a new voice AI provider:
 - **Microphone not working**: Verify HTTPS connection (required for getUserMedia) or localhost
 - **API connection fails**: Verify GEMINI_API_KEY is set correctly in .env.local
 - **Background noise not playing**: Likely blocked by autoplay policy; ensure audio.play() happens synchronously in user gesture handler
+
+## Claude Code Skills
+
+This project includes specialized Claude Code skills for common development workflows.
+
+### Available Skills
+
+| Command | Description |
+|---------|-------------|
+| `/create-demo` | Create a production-quality voice AI demo from a call transcript and optional website URL |
+
+### Create Demo from Transcript (`/create-demo`)
+
+**Location**: `.claude/skills/create-demo-from-transcript.md`
+
+This skill guides the end-to-end creation of a new demo configuration based on:
+- A sample call transcript (required)
+- A company website URL for research (optional)
+
+**What it creates:**
+1. **Mock Service** (`services/{industry}-service.ts`) - Business logic with demo data
+2. **Tool Definitions** - Added to `types/demo-config.ts`
+3. **Tool Handlers** - Added to `providers/openai-provider.ts`
+4. **Seed Data** - Complete demo configuration in both SQL files
+
+**Example usage:**
+```
+@Sample_Transcript.md Create a new demo based on this call transcript.
+Research https://example.com for branding.
+```
+
+**The skill covers:**
+- Transcript analysis and workflow extraction
+- Website research for branding
+- System prompt design with XML/Markdown structure
+- Tool definition and implementation
+- Seed data generation for all demo tables
+- Quality checklist verification
+
+### Adding New Skills
+
+To add a new Claude Code skill:
+
+1. Create a `.md` file in `.claude/skills/`
+2. Follow the skill template format with metadata header
+3. Register in `.claude/settings.json`
+4. Document in this README

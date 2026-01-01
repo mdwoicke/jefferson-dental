@@ -12,6 +12,8 @@ import {
   ToolConfig,
   SMSTemplate,
   UILabels,
+  MockDataPool,
+  MockDataPoolType,
   DemoConfigRow,
   BusinessProfileRow,
   AgentConfigRow,
@@ -19,8 +21,10 @@ import {
   ToolConfigRow,
   SMSTemplateRow,
   UILabelsRow,
+  MockDataPoolRow,
   getDefaultBusinessHours,
   generateSlug,
+  getDefaultPoolName,
   PREDEFINED_TOOLS,
   PredefinedToolName
 } from '../types/demo-config';
@@ -155,15 +159,16 @@ export class DemoConfigService {
 
       // Create main config record
       await this.dbAdapter.executeRawSQL(
-        `INSERT INTO demo_configs (id, slug, name, description, is_active, is_default)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO demo_configs (id, slug, name, description, is_active, is_default, ambient_audio_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           configId,
           slug,
           config.name || 'Untitled Demo',
           config.description || null,
           config.isActive ? 1 : 0,
-          config.isDefault ? 1 : 0
+          config.isDefault ? 1 : 0,
+          config.ambientAudio ? JSON.stringify(config.ambientAudio) : null
         ]
       );
 
@@ -199,6 +204,13 @@ export class DemoConfigService {
       // Create UI labels
       if (config.uiLabels) {
         await this.createUILabels(configId, config.uiLabels);
+      }
+
+      // Create mock data pools
+      if (config.mockDataPools) {
+        for (const pool of config.mockDataPools) {
+          await this.createMockDataPool(configId, pool);
+        }
       }
 
       // Log audit trail
@@ -254,6 +266,10 @@ export class DemoConfigService {
         fields.push('is_default = ?');
         values.push(updates.isDefault ? 1 : 0);
       }
+      if (updates.ambientAudio !== undefined) {
+        fields.push('ambient_audio_json = ?');
+        values.push(JSON.stringify(updates.ambientAudio));
+      }
 
       if (fields.length > 0) {
         values.push(id);
@@ -281,6 +297,9 @@ export class DemoConfigService {
       }
       if (updates.uiLabels) {
         await this.updateUILabels(id, updates.uiLabels);
+      }
+      if (updates.mockDataPools) {
+        await this.replaceMockDataPools(id, updates.mockDataPools);
       }
 
       // Log audit trail
@@ -395,6 +414,7 @@ export class DemoConfigService {
       if (newConfig.uiLabels) delete newConfig.uiLabels.id;
       newConfig.toolConfigs?.forEach(t => delete (t as any).id);
       newConfig.smsTemplates?.forEach(t => delete (t as any).id);
+      newConfig.mockDataPools?.forEach(p => delete (p as any).id);
 
       return this.createDemoConfig(newConfig);
     } catch (error) {
@@ -441,14 +461,16 @@ export class DemoConfigService {
       scenario,
       toolConfigs,
       smsTemplates,
-      uiLabels
+      uiLabels,
+      mockDataPools
     ] = await Promise.all([
       this.getBusinessProfile(row.id),
       this.getAgentConfig(row.id),
       this.getScenario(row.id),
       this.getToolConfigs(row.id),
       this.getSMSTemplates(row.id),
-      this.getUILabels(row.id)
+      this.getUILabels(row.id),
+      this.getMockDataPools(row.id)
     ]);
 
     return {
@@ -465,7 +487,9 @@ export class DemoConfigService {
       scenario: scenario!,
       toolConfigs,
       smsTemplates,
-      uiLabels: uiLabels!
+      uiLabels: uiLabels!,
+      mockDataPools,
+      ambientAudio: row.ambient_audio_json ? JSON.parse(row.ambient_audio_json) : undefined
     };
   }
 
@@ -886,6 +910,137 @@ export class DemoConfigService {
         demoConfigId
       ]
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // Mock Data Pools
+  // -------------------------------------------------------------------------
+
+  /**
+   * Get all mock data pools for a demo config
+   */
+  async getMockDataPools(demoConfigId: string): Promise<MockDataPool[]> {
+    const rows = await this.dbAdapter.executeRawSQL(
+      'SELECT * FROM demo_mock_data_pools WHERE demo_config_id = ? ORDER BY pool_type',
+      [demoConfigId]
+    ) as MockDataPoolRow[];
+
+    return rows.map(row => ({
+      id: row.id,
+      demoConfigId: row.demo_config_id,
+      poolType: row.pool_type as MockDataPoolType,
+      poolName: row.pool_name,
+      records: JSON.parse(row.records_json),
+      schema: row.schema_json ? JSON.parse(row.schema_json) : undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
+  }
+
+  /**
+   * Get a specific mock data pool by type
+   */
+  async getMockDataPool(demoConfigId: string, poolType: MockDataPoolType): Promise<MockDataPool | null> {
+    const rows = await this.dbAdapter.executeRawSQL(
+      'SELECT * FROM demo_mock_data_pools WHERE demo_config_id = ? AND pool_type = ?',
+      [demoConfigId, poolType]
+    ) as MockDataPoolRow[];
+
+    if (rows.length === 0) return null;
+
+    const row = rows[0];
+    return {
+      id: row.id,
+      demoConfigId: row.demo_config_id,
+      poolType: row.pool_type as MockDataPoolType,
+      poolName: row.pool_name,
+      records: JSON.parse(row.records_json),
+      schema: row.schema_json ? JSON.parse(row.schema_json) : undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  /**
+   * Create or update a mock data pool
+   */
+  async upsertMockDataPool(demoConfigId: string, pool: Partial<MockDataPool>): Promise<void> {
+    if (!pool.poolType) {
+      throw new Error('Pool type is required');
+    }
+
+    const existing = await this.getMockDataPool(demoConfigId, pool.poolType);
+
+    if (existing) {
+      await this.dbAdapter.executeRawSQL(
+        `UPDATE demo_mock_data_pools SET
+         pool_name = ?, records_json = ?, schema_json = ?
+         WHERE demo_config_id = ? AND pool_type = ?`,
+        [
+          pool.poolName || existing.poolName,
+          JSON.stringify(pool.records || existing.records),
+          pool.schema ? JSON.stringify(pool.schema) : null,
+          demoConfigId,
+          pool.poolType
+        ]
+      );
+    } else {
+      const id = `MDP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await this.dbAdapter.executeRawSQL(
+        `INSERT INTO demo_mock_data_pools
+         (id, demo_config_id, pool_type, pool_name, records_json, schema_json)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          demoConfigId,
+          pool.poolType,
+          pool.poolName || getDefaultPoolName(pool.poolType),
+          JSON.stringify(pool.records || []),
+          pool.schema ? JSON.stringify(pool.schema) : null
+        ]
+      );
+    }
+  }
+
+  /**
+   * Delete a specific mock data pool
+   */
+  async deleteMockDataPool(demoConfigId: string, poolType: MockDataPoolType): Promise<void> {
+    await this.dbAdapter.executeRawSQL(
+      'DELETE FROM demo_mock_data_pools WHERE demo_config_id = ? AND pool_type = ?',
+      [demoConfigId, poolType]
+    );
+  }
+
+  private async createMockDataPool(demoConfigId: string, pool: Partial<MockDataPool>): Promise<void> {
+    const id = `MDP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    await this.dbAdapter.executeRawSQL(
+      `INSERT INTO demo_mock_data_pools
+       (id, demo_config_id, pool_type, pool_name, records_json, schema_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        demoConfigId,
+        pool.poolType || 'members',
+        pool.poolName || (pool.poolType ? getDefaultPoolName(pool.poolType) : 'Mock Data'),
+        JSON.stringify(pool.records || []),
+        pool.schema ? JSON.stringify(pool.schema) : null
+      ]
+    );
+  }
+
+  private async replaceMockDataPools(demoConfigId: string, pools: MockDataPool[]): Promise<void> {
+    // Delete existing pools
+    await this.dbAdapter.executeRawSQL(
+      'DELETE FROM demo_mock_data_pools WHERE demo_config_id = ?',
+      [demoConfigId]
+    );
+
+    // Create new pools
+    for (const pool of pools) {
+      await this.createMockDataPool(demoConfigId, pool);
+    }
   }
 
   // =========================================================================

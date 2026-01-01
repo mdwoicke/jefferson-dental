@@ -1,9 +1,30 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CallState, VoiceProvider, CallSession } from '../shared/types';
 
+// Simplified demo config for telephony API
+interface DemoConfigLite {
+  name?: string;
+  businessProfile?: {
+    organizationName?: string;
+    phoneNumber?: string;
+    address?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+    };
+  };
+  agentConfig?: {
+    agentName?: string;
+    voiceName?: string;
+    systemPrompt?: string;
+  };
+}
+
 interface TelephonySessionConfig {
   phoneNumber: string;
   provider: VoiceProvider;
+  demoConfig?: DemoConfigLite;
 }
 
 // Types for function call items
@@ -381,6 +402,9 @@ export const useTelephonySession = (): UseTelephonySessionReturn => {
 
     try {
       console.log(`📞 Initiating call to ${config.phoneNumber} with ${config.provider}`);
+      if (config.demoConfig) {
+        console.log(`📝 Using demo config: ${config.demoConfig.name || 'unnamed'}`);
+      }
 
       const response = await fetch(`${BACKEND_URL}/api/calls`, {
         method: 'POST',
@@ -389,7 +413,8 @@ export const useTelephonySession = (): UseTelephonySessionReturn => {
         },
         body: JSON.stringify({
           phoneNumber: config.phoneNumber,
-          provider: config.provider
+          provider: config.provider,
+          demoConfig: config.demoConfig
         })
       });
 

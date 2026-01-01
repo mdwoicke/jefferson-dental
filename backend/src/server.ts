@@ -69,10 +69,11 @@ app.use((req, res, next) => {
 
 /**
  * POST /api/calls - Initiate a new outbound call
+ * Accepts optional demoConfig for custom system prompts
  */
 app.post('/api/calls', async (req, res) => {
   try {
-    const { phoneNumber, provider }: InitiateCallRequest = req.body;
+    const { phoneNumber, provider, demoConfig }: InitiateCallRequest = req.body;
 
     if (!phoneNumber || !provider) {
       return res.status(400).json({
@@ -94,8 +95,16 @@ app.post('/api/calls', async (req, res) => {
       });
     }
 
-    // Initiate call
-    const callId = await callManager.initiateCall(phoneNumber, provider);
+    // Log demo config if provided
+    if (demoConfig) {
+      console.log(`📝 Call initiated with demo config: ${demoConfig.name || 'unnamed'}`);
+      if (demoConfig.agentConfig?.systemPrompt) {
+        console.log(`   Custom systemPrompt: ${demoConfig.agentConfig.systemPrompt.substring(0, 100)}...`);
+      }
+    }
+
+    // Initiate call with optional demo config
+    const callId = await callManager.initiateCall(phoneNumber, provider, demoConfig);
 
     const response: CallResponse = {
       callId,
